@@ -7,7 +7,13 @@ Class {
 		'bridge',
 		'tools',
 		'maxSteps',
-		'systemPrompt'
+		'systemPrompt',
+		'announcer',
+		'pendingTurns',
+		'queueLock',
+		'workerProcess',
+		'isBusy',
+		'lastReply'
 	],
 	#category : 'Sloptalk-Core',
 	#package : 'Sloptalk',
@@ -16,6 +22,11 @@ Class {
 
 { #category : 'tools' }
 SloptalkAgent >> addDefaultTools [
+	self addImageTools
+]
+
+{ #category : 'tools' }
+SloptalkAgent >> addFilesystemTools [
 	self addTool: SloptalkListFilesTool new.
 	self addTool: SloptalkReadFileTool new.
 	self addTool: SloptalkWriteFileTool new.
@@ -23,9 +34,35 @@ SloptalkAgent >> addDefaultTools [
 ]
 
 { #category : 'tools' }
+SloptalkAgent >> addImageTools [
+	self addTool: SloptalkListPackagesTool new.
+	self addTool: SloptalkListClassesTool new.
+	self addTool: SloptalkListMethodsTool new.
+	self addTool: SloptalkSearchMethodsTool new.
+	self addTool: SloptalkReadClassTool new.
+	self addTool: SloptalkReadMethodTool new.
+	self addTool: SloptalkBrowsePackageTool new.
+	self addTool: SloptalkBrowseClassTool new.
+	self addTool: SloptalkBrowseMethodTool new.
+	self addTool: SloptalkOpenPlaygroundTool new.
+	self addTool: SloptalkEvaluateSmalltalkTool new.
+	self addTool: SloptalkCompileMethodTool new
+]
+
+{ #category : 'tools' }
 SloptalkAgent >> addTool: aSloptalkTool [
 	tools add: aSloptalkTool.
 	^ aSloptalkTool
+]
+
+{ #category : 'announcing' }
+SloptalkAgent >> announce: anAnnouncement [
+	announcer announce: anAnnouncement
+]
+
+{ #category : 'accessing' }
+SloptalkAgent >> announcer [
+	^ announcer
 ]
 
 { #category : 'accessing' }
@@ -72,9 +109,23 @@ SloptalkAgent >> conversation [
 	^ conversation
 ]
 
+{ #category : 'private' }
+SloptalkAgent >> compiledMethodForClass: aClassName selector: aSelector classSide: aBoolean [
+	| behavior selector |
+	behavior := self behaviorNamed: aClassName classSide: aBoolean.
+	selector := aSelector asString asSymbol.
+	^ behavior
+		compiledMethodAt: selector
+		ifAbsent: [
+			self
+				error:
+					'Unknown method: '
+						, (self methodLabelForBehavior: behavior selector: selector) ]
+]
+
 { #category : 'defaults' }
 SloptalkAgent >> defaultSystemPrompt [
-	^ 'You are Sloptalk, a local coding agent working inside a Pharo image.' 
+	^ 'You are Sloptalk, a local coding agent running inside a live Pharo image.'
 ]
 
 { #category : 'private' }
@@ -86,6 +137,8 @@ SloptalkAgent >> effectiveSystemPrompt [
 			nextPut: Character lf;
 			nextPutAll: 'Workspace root: ';
 			nextPutAll: self workspaceReference fullName;
+			nextPut: Character lf;
+			nextPutAll: 'You are operating inside the image first, not just on files.';
 			nextPut: Character lf;
 			nextPut: Character lf;
 			nextPutAll: 'You can use tools. Respond with JSON only. Do not use markdown fences. Do not explain the JSON.';
@@ -101,11 +154,15 @@ SloptalkAgent >> effectiveSystemPrompt [
 			nextPut: Character lf;
 			nextPutAll: '- Call at most one tool per response.';
 			nextPut: Character lf;
-			nextPutAll: '- Use tools when you need workspace information.';
+			nextPutAll: '- Prefer image tools over filesystem tools for packages, classes, methods, and UI actions.';
 			nextPut: Character lf;
 			nextPutAll: '- After a tool result, either call another tool or answer the user.';
 			nextPut: Character lf;
-			nextPutAll: '- For file paths, prefer paths relative to the workspace root.';
+			nextPutAll: '- Use browse_* and open_playground when the user asks to open a tool window.';
+			nextPut: Character lf;
+			nextPutAll: '- Use compile_method for method edits and evaluate_smalltalk for arbitrary image actions.';
+			nextPut: Character lf;
+			nextPutAll: '- For file paths, prefer paths relative to the workspace root when filesystem tools are available.';
 			nextPut: Character lf;
 			nextPut: Character lf;
 			nextPutAll: 'Available tools:';
@@ -145,6 +202,22 @@ SloptalkAgent >> finalAssistantTextFrom: aDecision rawResponse: aString [
 	^ self valueAt: #message in: aDecision ifAbsent: [ aString ]
 ]
 
+{ #category : 'private' }
+SloptalkAgent >> behaviorNamed: aString classSide: aBoolean [
+	| class |
+	class := self classNamed: aString.
+	^ aBoolean
+		ifTrue: [ class classSide ]
+		ifFalse: [ class instanceSide ]
+]
+
+{ #category : 'private' }
+SloptalkAgent >> classNamed: aString [
+	^ Smalltalk globals
+		at: aString asString asSymbol
+		ifAbsent: [ self error: 'Unknown class: ' , aString asString ]
+]
+
 { #category : 'initialization' }
 SloptalkAgent >> initialize [
 	super initialize.
@@ -153,13 +226,18 @@ SloptalkAgent >> initialize [
 	tools := OrderedCollection new.
 	maxSteps := 8.
 	systemPrompt := self defaultSystemPrompt.
+	announcer := Announcer new.
+	pendingTurns := OrderedCollection new.
+	queueLock := Semaphore forMutualExclusion.
+	workerProcess := nil.
+	isBusy := false.
+	lastReply := nil.
 	self addDefaultTools
 ]
 
 { #category : 'api' }
 SloptalkAgent >> receiveUserMessage: aString [
-	conversation addUserMessage: aString.
-	^ self runLoop
+	^ self sendAndWait: aString
 ]
 
 { #category : 'accessing' }
@@ -183,6 +261,81 @@ SloptalkAgent >> normalizedJsonTextFrom: aString [
 		(trimmed endsWith: '```') ifTrue: [
 			trimmed := (trimmed copyFrom: 1 to: trimmed size - 3) trimBoth ] ].
 	^ trimmed
+]
+
+{ #category : 'accessing' }
+SloptalkAgent >> lastReply [
+	^ lastReply
+]
+
+{ #category : 'private' }
+SloptalkAgent >> methodLabelFor: aCompiledMethod [
+	^ self
+		methodLabelForBehavior: aCompiledMethod methodClass
+		selector: aCompiledMethod selector
+]
+
+{ #category : 'private' }
+SloptalkAgent >> methodLabelForBehavior: aBehavior selector: aSelector [
+	^ aBehavior isMeta
+		ifTrue: [ aBehavior instanceSide name , ' class>>' , aSelector asString ]
+		ifFalse: [ aBehavior name , '>>' , aSelector asString ]
+]
+
+{ #category : 'private' }
+SloptalkAgent >> nextPendingTurn [
+	^ queueLock critical: [
+		pendingTurns
+			ifEmpty: [ nil ]
+			ifNotEmpty: [ pendingTurns removeFirst ] ]
+]
+
+{ #category : 'private' }
+SloptalkAgent >> packageNamed: aString [
+	^ PackageOrganizer default
+		packageNamed: aString
+		ifAbsent: [ self error: 'Unknown package: ' , aString asString ]
+]
+
+{ #category : 'accessing' }
+SloptalkAgent >> pendingTurns [
+	^ queueLock critical: [ pendingTurns asArray ]
+]
+
+{ #category : 'private' }
+SloptalkAgent >> processPendingTurns [
+	[
+		[ | turn |
+		turn := self nextPendingTurn.
+		turn ifNil: [ ^ self ].
+		self processTurn: turn ] repeat
+	] ensure: [
+		queueLock critical: [
+			workerProcess := nil.
+			pendingTurns ifNotEmpty: [
+				workerProcess := self spawnWorkerProcess ] ] ]
+]
+
+{ #category : 'private' }
+SloptalkAgent >> processTurn: aSloptalkTurn [
+	| reply errorText |
+	isBusy := true.
+	aSloptalkTurn markRunning.
+	self announce: (SloptalkTurnStarted agent: self turn: aSloptalkTurn).
+
+	[
+		conversation addUserMessage: aSloptalkTurn prompt.
+		reply := self runLoop.
+		lastReply := reply.
+		aSloptalkTurn markCompletedWith: reply.
+		self announce: (SloptalkTurnCompleted agent: self turn: aSloptalkTurn)
+	] on: Error do: [ :error |
+		errorText := error messageText.
+		lastReply := 'Error: ' , errorText.
+		conversation addAssistantMessage: 'Error: ' , errorText.
+		aSloptalkTurn markFailedWith: errorText.
+		self announce: (SloptalkTurnFailed agent: self turn: aSloptalkTurn) ]
+		ensure: [ isBusy := false ]
 ]
 
 { #category : 'printing' }
@@ -223,7 +376,18 @@ SloptalkAgent >> runLoop [
 
 { #category : 'api' }
 SloptalkAgent >> send: aString [
-	^ self receiveUserMessage: aString
+	| turn |
+	turn := SloptalkTurn prompt: aString.
+	queueLock critical: [
+		pendingTurns add: turn.
+		self ensureWorkerRunning ].
+	self announce: (SloptalkTurnQueued agent: self turn: turn).
+	^ turn
+]
+
+{ #category : 'api' }
+SloptalkAgent >> sendAndWait: aString [
+	^ (self send: aString) waitForReply
 ]
 
 { #category : 'accessing' }
@@ -258,6 +422,13 @@ SloptalkAgent >> valueAt: aKey in: aDictionary ifAbsent: aBlock [
 				ifAbsent: aBlock ]
 ]
 
+{ #category : 'private' }
+SloptalkAgent >> spawnWorkerProcess [
+	^ [ self processPendingTurns ]
+		forkAt: Processor userBackgroundPriority
+		named: 'Sloptalk agent loop'
+]
+
 { #category : 'accessing' }
 SloptalkAgent >> baseUrl [
 	^ bridge baseUrl
@@ -276,6 +447,11 @@ SloptalkAgent >> workspacePath [
 { #category : 'accessing' }
 SloptalkAgent >> workspacePath: aString [
 	bridge workspacePath: aString
+]
+
+{ #category : 'accessing' }
+SloptalkAgent >> busy [
+	^ isBusy or: [ self pendingTurns isNotEmpty ]
 ]
 
 { #category : 'private' }
@@ -303,4 +479,44 @@ SloptalkAgent >> relativePathFor: aFileReference [
 	^ ((workspace fullPath = aFileReference fullPath)
 		ifTrue: [ '.' asPath ]
 		ifFalse: [ aFileReference relativeToReference: workspace ]) pathString
+]
+
+{ #category : 'private' }
+SloptalkAgent >> ensureWorkerRunning [
+	workerProcess ifNotNil: [
+		workerProcess isTerminated ifFalse: [ ^ self ].
+		workerProcess := nil ].
+	workerProcess := self spawnWorkerProcess
+]
+
+{ #category : 'private' }
+SloptalkAgent >> evaluateSmalltalk: aString [
+	^ OpalCompiler new
+		source: aString;
+		evaluate
+]
+
+{ #category : 'private' }
+SloptalkAgent >> truncateText: aString to: anInteger [
+	aString size <= anInteger ifTrue: [ ^ aString ].
+	^ (aString copyFrom: 1 to: anInteger) , String lf , '... truncated ...'
+]
+
+{ #category : 'announcing' }
+SloptalkAgent >> unsubscribe: anObject [
+	announcer unsubscribe: anObject
+]
+
+{ #category : 'announcing' }
+SloptalkAgent >> when: anAnnouncementClass do: aBlock [
+	^ announcer when: anAnnouncementClass do: aBlock
+]
+
+{ #category : 'private' }
+SloptalkAgent >> displayStringForObject: anObject [
+	| display |
+	display := [ anObject printString ]
+		on: Error
+		do: [ :error | '<printString error: ' , error messageText , '>' ].
+	^ self truncateText: display to: 8000
 ]
