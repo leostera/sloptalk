@@ -10,6 +10,24 @@ Class {
 	#tag : 'Model'
 }
 
+{ #category : 'instance creation' }
+SloptalkConversation class >> fromTranscriptString: aString [
+	| conversation |
+	conversation := self new.
+	aString linesDo: [ :line |
+		| separator role text |
+		line isEmpty ifFalse: [
+			separator := line indexOfSubCollection: ': ' startingAt: 1.
+			separator > 0
+				ifTrue: [
+					role := line copyFrom: 1 to: separator - 1.
+					text := line copyFrom: separator + 2 to: line size.
+					conversation addMessage: (SloptalkMessage role: role text: text) ]
+				ifFalse: [
+					conversation addAssistantMessage: line ] ] ].
+	^ conversation
+]
+
 { #category : 'adding' }
 SloptalkConversation >> addAssistantMessage: aString [
 	^ self addAssistantMessage: aString details: nil

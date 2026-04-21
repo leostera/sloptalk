@@ -136,6 +136,7 @@ SloptalkAgent >> requestTimeoutSeconds: anInteger [
 
 { #category : 'accessing' }
 SloptalkAgent >> conversation [
+	self ensureConversationModel.
 	^ conversation
 ]
 
@@ -199,6 +200,20 @@ SloptalkAgent >> effectiveSystemPrompt [
 			nextPut: Character lf.
 		tools do: [ :tool |
 			stream nextPutAll: tool promptSpec; nextPut: Character lf ] ]
+]
+
+{ #category : 'private' }
+SloptalkAgent >> ensureConversationModel [
+	conversation ifNil: [
+		conversation := SloptalkConversation new.
+		^ self ].
+
+	(conversation isKindOf: SloptalkConversation) ifTrue: [ ^ self ].
+	(conversation isString or: [ conversation isKindOf: Text ]) ifTrue: [
+		conversation := SloptalkConversation fromTranscriptString: conversation asString.
+		^ self ].
+
+	conversation := SloptalkConversation new
 ]
 
 { #category : 'private' }
