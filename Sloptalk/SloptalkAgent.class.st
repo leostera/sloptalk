@@ -343,11 +343,11 @@ SloptalkAgent >> processTurn: aSloptalkTurn [
 	| reply errorText |
 	isBusy := true.
 	aSloptalkTurn markRunning.
-	self announce: (SloptalkTurnStarted agent: self turn: aSloptalkTurn).
 
 	[
 		[
 			conversation addUserMessage: aSloptalkTurn prompt.
+			self announce: (SloptalkTurnStarted agent: self turn: aSloptalkTurn).
 			reply := self runLoop.
 			lastReply := reply.
 			aSloptalkTurn markCompletedWith: reply.
