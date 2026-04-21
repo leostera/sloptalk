@@ -6,7 +6,8 @@ Class {
 		'workspacePath',
 		'baseUrl',
 		'endpointPath',
-		'model'
+		'model',
+		'requestTimeoutSeconds'
 	],
 	#category : 'Sloptalk-Bridge',
 	#package : 'Sloptalk',
@@ -78,7 +79,8 @@ SloptalkCodexBridge >> initialize [
 	workspacePath := '.'.
 	baseUrl := 'http://localhost:11434'.
 	endpointPath := '/v1/chat/completions'.
-	model := 'gemma-4-31B-it-Q8_0.gguf'
+	model := 'gemma-4-31B-it-Q8_0.gguf'.
+	requestTimeoutSeconds := 600
 ]
 
 { #category : 'api' }
@@ -91,13 +93,32 @@ SloptalkCodexBridge >> completeConversation: aConversation systemPrompt: aString
 	| client |
 	client := ZnClient new.
 	[
-		client
-			forJsonREST;
-			post: self endpointUrl contents: (self requestBodyFor: aConversation systemPrompt: aString).
+		[
+			client
+				beOneShot;
+				timeout: requestTimeoutSeconds;
+				forJsonREST;
+				post: self endpointUrl contents: (self requestBodyFor: aConversation systemPrompt: aString)
+		] on: ConnectionTimedOut do: [ :error |
+			self
+				error:
+					'Chat completion request timed out after '
+						, requestTimeoutSeconds asString
+						, ' seconds' ].
 		client isSuccess ifFalse: [
 			self error: 'Chat completion request failed with status ' , client response statusLine asString ].
 		^ self assistantTextFromResponse: client contents
 	] ensure: [ client close ]
+]
+
+{ #category : 'accessing' }
+SloptalkCodexBridge >> requestTimeoutSeconds [
+	^ requestTimeoutSeconds
+]
+
+{ #category : 'accessing' }
+SloptalkCodexBridge >> requestTimeoutSeconds: anInteger [
+	requestTimeoutSeconds := anInteger
 ]
 
 { #category : 'private' }

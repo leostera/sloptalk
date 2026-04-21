@@ -105,6 +105,16 @@ SloptalkAgent >> model: aString [
 ]
 
 { #category : 'accessing' }
+SloptalkAgent >> requestTimeoutSeconds [
+	^ bridge requestTimeoutSeconds
+]
+
+{ #category : 'accessing' }
+SloptalkAgent >> requestTimeoutSeconds: anInteger [
+	bridge requestTimeoutSeconds: anInteger
+]
+
+{ #category : 'accessing' }
 SloptalkAgent >> conversation [
 	^ conversation
 ]
