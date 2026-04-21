@@ -126,6 +126,7 @@ SloptalkCodexOAuthProvider >> requestBodyForRequest: aSloptalkLLMRequest [
 		#model -> model.
 		#instructions -> aSloptalkLLMRequest systemPrompt.
 		#input -> input asArray.
+		#store -> false.
 		#stream -> false
 	} asDictionary
 ]
