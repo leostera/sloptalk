@@ -317,14 +317,15 @@ SloptalkApp >> ensureInitializedState [
 	codexAuthState ifNil: [
 		codexAuthState := Dictionary new.
 		self
-			setCodexAuthStateStatus: (self codexConnected
+			setCodexAuthStateStatus: ((codexSession isNotNil and: [ codexSession isConnected ])
 				ifTrue: [ #connected ]
 				ifFalse: [ #notConnected ])
 			errorText: nil
 			deviceAuthId: nil
 			userCode: nil
 			verificationUrl: nil ].
-	self applyCodexSessionToAgentIfNeeded.
+	(agent provider isKindOf: SloptalkCodexOAuthProvider) ifTrue: [
+		agent provider session: codexSession ].
 	^ self
 ]
 
