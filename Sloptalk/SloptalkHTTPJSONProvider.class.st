@@ -128,6 +128,19 @@ SloptalkHTTPJSONProvider >> normalizeContent: anObject [
 ]
 
 { #category : 'private' }
+SloptalkHTTPJSONProvider >> outputItemsFromPayload: aDictionary [
+	^ { SloptalkLLMOutputItem assistantText: (self assistantTextFromPayload: aDictionary) }
+]
+
+{ #category : 'private' }
+SloptalkHTTPJSONProvider >> parsedJSONObjectFromString: aString [
+	aString ifNil: [ ^ Dictionary new ].
+	^ [ STONJSON fromString: aString ]
+		on: Error
+		do: [ :error | aString ]
+]
+
+{ #category : 'private' }
 SloptalkHTTPJSONProvider >> prepareClient: aZnClient [
 	aZnClient
 		beOneShot;
@@ -149,10 +162,31 @@ SloptalkHTTPJSONProvider >> requestBodyForRequest: aSloptalkLLMRequest [
 
 { #category : 'private' }
 SloptalkHTTPJSONProvider >> responseFromPayload: aDictionary [
+	| outputItems |
+	outputItems := self outputItemsFromPayload: aDictionary.
 	^ SloptalkLLMResponse
-		text: (self assistantTextFromPayload: aDictionary)
+		providerName: self providerName
+		model: (self responseModelFromPayload: aDictionary)
+		outputItems: outputItems
+		usage: (self usageFromPayload: aDictionary)
+		finishReason: (self finishReasonFromPayload: aDictionary outputItems: outputItems)
 		payload: aDictionary
 		metadata: (self responseMetadataFromPayload: aDictionary)
+]
+
+{ #category : 'private' }
+SloptalkHTTPJSONProvider >> finishReasonFromPayload: aDictionary outputItems: aCollection [
+	^ (aCollection anySatisfy: [ :each | each isToolCall ])
+		ifTrue: [ 'tool_calls' ]
+		ifFalse: [ 'stop' ]
+]
+
+{ #category : 'private' }
+SloptalkHTTPJSONProvider >> responseModelFromPayload: aDictionary [
+	^ self
+		valueAt: #model
+		in: aDictionary
+		ifAbsent: [ model ]
 ]
 
 { #category : 'private' }
@@ -170,6 +204,11 @@ SloptalkHTTPJSONProvider >> responseMetadataFromPayload: aDictionary [
 	responseId ifNotNil: [
 		metadata at: #response_id put: responseId ].
 	^ metadata
+]
+
+{ #category : 'private' }
+SloptalkHTTPJSONProvider >> usageFromPayload: aDictionary [
+	^ SloptalkLLMUsage zero
 ]
 
 { #category : 'private' }

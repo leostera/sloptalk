@@ -3,8 +3,7 @@ Class {
 	#name : 'SloptalkLLMRequest',
 	#superclass : 'Object',
 	#instVars : [
-		'systemPrompt',
-		'messages'
+		'inputItems'
 	],
 	#category : 'Sloptalk-Providers',
 	#package : 'Sloptalk',
@@ -12,36 +11,76 @@ Class {
 }
 
 { #category : 'instance creation' }
-SloptalkLLMRequest class >> systemPrompt: aString messages: aCollection [
+SloptalkLLMRequest class >> inputItems: aCollection [
 	^ self new
-		systemPrompt: aString;
-		messages: aCollection;
+		inputItems: aCollection;
+		yourself
+]
+
+{ #category : 'instance creation' }
+SloptalkLLMRequest class >> systemPrompt: aString messages: aCollection [
+	| items normalizedPrompt |
+	items := OrderedCollection new.
+	normalizedPrompt := (aString ifNil: [ '' ]) trimBoth.
+	normalizedPrompt ifNotEmpty: [
+		items add: (SloptalkLLMInputItem systemText: normalizedPrompt) ].
+	items addAll: aCollection.
+	^ self new
+		inputItems: items;
 		yourself
 ]
 
 { #category : 'initialization' }
 SloptalkLLMRequest >> initialize [
 	super initialize.
-	systemPrompt := ''.
-	messages := #()
+	inputItems := #()
+]
+
+{ #category : 'accessing' }
+SloptalkLLMRequest >> inputItems [
+	^ inputItems
+]
+
+{ #category : 'accessing' }
+SloptalkLLMRequest >> inputItems: aCollection [
+	inputItems := aCollection asArray
 ]
 
 { #category : 'accessing' }
 SloptalkLLMRequest >> messages [
-	^ messages
+	^ self inputItems
 ]
 
 { #category : 'accessing' }
 SloptalkLLMRequest >> messages: aCollection [
-	messages := aCollection asArray
+	self inputItems: aCollection
+]
+
+{ #category : 'accessing' }
+SloptalkLLMRequest >> nonSystemInputItems [
+	^ inputItems reject: [ :each | each isSystemMessage ]
 ]
 
 { #category : 'accessing' }
 SloptalkLLMRequest >> systemPrompt [
-	^ systemPrompt
+	| systemItems |
+	systemItems := inputItems select: [ :each | each isSystemMessage ].
+	^ String streamContents: [ :stream |
+		systemItems
+			doWithIndex: [ :each :index |
+				index > 1 ifTrue: [
+					stream
+						nextPut: Character lf;
+						nextPut: Character lf ].
+				stream nextPutAll: each text ] ]
 ]
 
 { #category : 'accessing' }
 SloptalkLLMRequest >> systemPrompt: aString [
-	systemPrompt := aString ifNil: [ '' ]
+	| items normalizedPrompt |
+	items := OrderedCollection withAll: self nonSystemInputItems.
+	normalizedPrompt := (aString ifNil: [ '' ]) trimBoth.
+	normalizedPrompt ifNotEmpty: [
+		items addFirst: (SloptalkLLMInputItem systemText: normalizedPrompt) ].
+	inputItems := items asArray
 ]

@@ -14,7 +14,9 @@ Class {
 		'queueLock',
 		'workerProcess',
 		'isBusy',
-		'lastReply'
+		'lastReply',
+		'lastLLMRequest',
+		'lastLLMResponse'
 	],
 	#category : 'Sloptalk-Core',
 	#package : 'Sloptalk',
@@ -90,6 +92,13 @@ SloptalkAgent >> provider: aSloptalkLLMProvider [
 SloptalkAgent >> assistantMessageDetailsFromDecision: aDecision response: aSloptalkLLMResponse [
 	| details |
 	details := aSloptalkLLMResponse metadata copy.
+	aSloptalkLLMResponse providerName ifNotNil: [
+		details at: #provider put: aSloptalkLLMResponse providerName ].
+	aSloptalkLLMResponse model ifNotNil: [
+		details at: #model put: aSloptalkLLMResponse model ].
+	aSloptalkLLMResponse finishReason ifNotNil: [
+		details at: #finish_reason put: aSloptalkLLMResponse finishReason ].
+	details at: #usage put: aSloptalkLLMResponse usage.
 	aDecision keysAndValuesDo: [ :key :value |
 		details at: key put: value ].
 	^ details
@@ -287,6 +296,8 @@ SloptalkAgent >> initialize [
 	workerProcess := nil.
 	isBusy := false.
 	lastReply := nil.
+	lastLLMRequest := nil.
+	lastLLMResponse := nil.
 	self addDefaultTools
 ]
 
@@ -321,6 +332,16 @@ SloptalkAgent >> normalizedJsonTextFrom: aString [
 { #category : 'accessing' }
 SloptalkAgent >> lastReply [
 	^ lastReply
+]
+
+{ #category : 'accessing' }
+SloptalkAgent >> lastLLMRequest [
+	^ lastLLMRequest
+]
+
+{ #category : 'accessing' }
+SloptalkAgent >> lastLLMResponse [
+	^ lastLLMResponse
 ]
 
 { #category : 'private' }
@@ -407,14 +428,17 @@ SloptalkAgent >> transcriptString [
 
 { #category : 'private' }
 SloptalkAgent >> runLoop [
-	| stepCount llmResponse decision type reply |
+	| stepCount llmRequest llmResponse decision type reply |
 	stepCount := 0.
 
 	[ stepCount < maxSteps ] whileTrue: [
 		stepCount := stepCount + 1.
-		llmResponse := bridge
-			completeConversation: conversation
+		llmRequest := self provider
+			requestForConversation: conversation
 			systemPrompt: self effectiveSystemPrompt.
+		lastLLMRequest := llmRequest.
+		llmResponse := bridge completeRequest: llmRequest.
+		lastLLMResponse := llmResponse.
 		decision := self decisionFromResponse: llmResponse.
 		type := self decisionTypeOf: decision.
 
@@ -586,7 +610,9 @@ SloptalkAgent >> resetConversation [
 	self busy ifTrue: [
 		self error: 'Cannot reset the conversation while turns are still running.' ].
 	conversation := SloptalkConversation new.
-	lastReply := nil
+	lastReply := nil.
+	lastLLMRequest := nil.
+	lastLLMResponse := nil
 ]
 
 { #category : 'accessing' }

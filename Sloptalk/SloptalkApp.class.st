@@ -73,6 +73,10 @@ SloptalkApp >> debugTranscriptPlaygroundContents [
 			nextPut: Character lf;
 			nextPutAll: 'messages := app transcriptMessages.';
 			nextPut: Character lf;
+			nextPutAll: 'lastRequest := app lastLLMRequest.';
+			nextPut: Character lf;
+			nextPutAll: 'lastResponse := app lastLLMResponse.';
+			nextPut: Character lf;
 			nextPut: Character lf;
 			nextPutAll: '"Evaluate one of these:"';
 			nextPut: Character lf;
@@ -82,7 +86,19 @@ SloptalkApp >> debugTranscriptPlaygroundContents [
 			nextPut: Character lf;
 			nextPutAll: 'messages collect: [ :each | { each role. each text. each details } ]';
 			nextPut: Character lf;
-			nextPutAll: 'messages last ifNotNil: [ :each | each details ]' ]
+			nextPutAll: 'messages last ifNotNil: [ :each | each details ]';
+			nextPut: Character lf;
+			nextPutAll: 'lastRequest';
+			nextPut: Character lf;
+			nextPutAll: 'lastRequest inputItems';
+			nextPut: Character lf;
+			nextPutAll: 'lastResponse';
+			nextPut: Character lf;
+			nextPutAll: 'lastResponse outputItems';
+			nextPut: Character lf;
+			nextPutAll: 'lastResponse usage';
+			nextPut: Character lf;
+			nextPutAll: 'lastResponse payload' ]
 ]
 
 { #category : 'accessing' }
@@ -418,6 +434,18 @@ SloptalkApp >> initializeProviderSettings [
 SloptalkApp >> model [
 	self ensureInitializedState.
 	^ agent model
+]
+
+{ #category : 'debugging' }
+SloptalkApp >> lastLLMRequest [
+	self ensureInitializedState.
+	^ agent lastLLMRequest
+]
+
+{ #category : 'debugging' }
+SloptalkApp >> lastLLMResponse [
+	self ensureInitializedState.
+	^ agent lastLLMResponse
 ]
 
 { #category : 'accessing' }

@@ -66,6 +66,11 @@ SloptalkCodexBridge >> completeConversation: aConversation systemPrompt: aString
 		systemPrompt: aString
 ]
 
+{ #category : 'api' }
+SloptalkCodexBridge >> completeRequest: aSloptalkLLMRequest [
+	^ provider completeRequest: aSloptalkLLMRequest
+]
+
 { #category : 'accessing' }
 SloptalkCodexBridge >> provider [
 	^ provider

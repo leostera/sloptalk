@@ -61,9 +61,11 @@ SloptalkLLMProvider >> providerName [
 
 { #category : 'private' }
 SloptalkLLMProvider >> requestForConversation: aConversation systemPrompt: aString [
+	| inputItems |
+	inputItems := aConversation messages collect: [ :each | each asLLMInputItem ].
 	^ SloptalkLLMRequest
 		systemPrompt: aString
-		messages: aConversation messages
+		messages: inputItems
 ]
 
 { #category : 'accessing' }

@@ -15,28 +15,23 @@ SloptalkCodexOAuthProvider >> assistantTextFromOutputItems: outputItems [
 	| fragments |
 	fragments := OrderedCollection new.
 	outputItems do: [ :each |
-		| content |
-		content := self valueAt: #content in: each ifAbsent: [ #() ].
-		(content isCollection and: [ content isString not ]) ifTrue: [
-			content do: [ :part |
-				| text |
-				text := self valueAt: #text in: part ifAbsent: [
-					self valueAt: #content in: part ifAbsent: [ nil ] ].
-				text ifNotNil: [ fragments add: text asString ] ] ] ].
+		each isMessage ifTrue: [
+			each contentParts do: [ :part |
+				part isText ifTrue: [ fragments add: part text ] ] ] ].
 	^ String streamContents: [ :stream |
 		fragments do: [ :each | stream nextPutAll: each ] ]
 ]
 
 { #category : 'private' }
 SloptalkCodexOAuthProvider >> assistantTextFromPayload: aDictionary [
-	| outputText output normalizedText |
+	| outputItems outputText normalizedText |
+	outputItems := self outputItemsFromPayload: aDictionary.
+	(outputItems anySatisfy: [ :each | each isMessage ]) ifTrue: [
+		normalizedText := self assistantTextFromOutputItems: outputItems.
+		normalizedText ifNotEmpty: [ ^ normalizedText ] ].
 	outputText := self valueAt: #output_text in: aDictionary ifAbsent: [ nil ].
 	outputText ifNotNil: [
 		normalizedText := self normalizeContent: outputText.
-		normalizedText ifNotEmpty: [ ^ normalizedText ] ].
-	output := self valueAt: #output in: aDictionary ifAbsent: [ nil ].
-	(output isCollection and: [ output isString not ]) ifTrue: [
-		normalizedText := self assistantTextFromOutputItems: output.
 		normalizedText ifNotEmpty: [ ^ normalizedText ] ].
 	^ self
 		error: 'Codex response did not include assistant output text'
@@ -169,7 +164,8 @@ SloptalkCodexOAuthProvider >> jsonStringFromArguments: anObject [
 { #category : 'private' }
 SloptalkCodexOAuthProvider >> requestBodyForRequest: aSloptalkLLMRequest [
 	| input |
-	input := aSloptalkLLMRequest messages collect: [ :each | self responsesInputItemFor: each ].
+	input := aSloptalkLLMRequest nonSystemInputItems
+		collect: [ :each | self responsesInputItemFor: each ].
 
 	^ {
 		#model -> model.
@@ -200,34 +196,122 @@ SloptalkCodexOAuthProvider >> responsePayloadFromEventStream: aString [
 ]
 
 { #category : 'private' }
-SloptalkCodexOAuthProvider >> responsesInputItemFor: aSloptalkMessage [
-	aSloptalkMessage isToolCallMessage ifTrue: [
+SloptalkCodexOAuthProvider >> responsesInputItemFor: aSloptalkLLMInputItem [
+	aSloptalkLLMInputItem isToolCall ifTrue: [
 		^ {
 			#type -> 'function_call'.
-			#call_id -> (self callIdForMessage: aSloptalkMessage).
-			#name -> (aSloptalkMessage toolName ifNil: [ 'unknown' ]).
-			#arguments -> (self jsonStringFromArguments: aSloptalkMessage toolArguments)
+			#call_id -> (aSloptalkLLMInputItem callId ifNil: [ 'call_unknown' ]).
+			#name -> (aSloptalkLLMInputItem toolName ifNil: [ 'unknown' ]).
+			#arguments -> (self jsonStringFromArguments: aSloptalkLLMInputItem arguments)
 		} asDictionary ].
 
-	aSloptalkMessage isToolResult ifTrue: [
+	aSloptalkLLMInputItem isToolResult ifTrue: [
 		^ {
 			#type -> 'function_call_output'.
-			#call_id -> (self callIdForMessage: aSloptalkMessage).
-			#output -> aSloptalkMessage text
+			#call_id -> (aSloptalkLLMInputItem callId ifNil: [ 'call_unknown' ]).
+			#output -> aSloptalkLLMInputItem resultText
 		} asDictionary ].
 
 	^ {
 		#type -> 'message'.
-		#role -> aSloptalkMessage role.
-		#content -> {
-			{
-				#type -> (aSloptalkMessage role = 'assistant'
-					ifTrue: [ 'output_text' ]
-					ifFalse: [ 'input_text' ]).
-				#text -> aSloptalkMessage text
-			} asDictionary
-		}
+		#role -> aSloptalkLLMInputItem role.
+		#content -> ((aSloptalkLLMInputItem contentParts collect: [ :each |
+			each isImageUrl
+				ifTrue: [
+					{
+						#type -> 'input_image'.
+						#image_url -> each url
+					} asDictionary ]
+				ifFalse: [
+					{
+						#type -> (aSloptalkLLMInputItem role = 'assistant'
+							ifTrue: [ 'output_text' ]
+							ifFalse: [ 'input_text' ]).
+						#text -> each text
+					} asDictionary ] ]) asArray)
 	} asDictionary
+]
+
+{ #category : 'private' }
+SloptalkCodexOAuthProvider >> finishReasonFromPayload: aDictionary outputItems: aCollection [
+	(aCollection anySatisfy: [ :each | each isToolCall ]) ifTrue: [ ^ 'tool_calls' ].
+	^ self
+		valueAt: #finish_reason
+		in: aDictionary
+		ifAbsent: [ 'stop' ]
+]
+
+{ #category : 'private' }
+SloptalkCodexOAuthProvider >> outputItemsFromPayload: aDictionary [
+	| outputValues outputItems outputText normalizedText |
+	outputItems := OrderedCollection new.
+	outputValues := self valueAt: #output in: aDictionary ifAbsent: [ #() ].
+	outputValues do: [ :each |
+		| type role contentParts summary |
+		type := self valueAt: #type in: each ifAbsent: [ nil ].
+		type = 'message' ifTrue: [
+			contentParts := OrderedCollection new.
+			(self valueAt: #content in: each ifAbsent: [ #() ]) do: [ :part |
+				| partType |
+				partType := self valueAt: #type in: part ifAbsent: [ nil ].
+				partType = 'output_text' ifTrue: [
+					contentParts add: (SloptalkLLMContentPart
+						text: (self valueAt: #text in: part ifAbsent: [ '' ])) ].
+				partType = 'output_json' ifTrue: [
+					contentParts add: (SloptalkLLMContentPart
+						json: (self valueAt: #json in: part ifAbsent: [ nil ])) ] ].
+			contentParts ifNotEmpty: [
+				role := self valueAt: #role in: each ifAbsent: [ 'assistant' ].
+				outputItems add: (
+					SloptalkLLMOutputItem
+						messageRole: role
+						contentParts: contentParts) ] ].
+		type = 'function_call' ifTrue: [
+			outputItems add: (
+				SloptalkLLMOutputItem
+					toolCallId: (self
+						valueAt: #call_id
+						in: each
+						ifAbsent: [ self valueAt: #id in: each ifAbsent: [ nil ] ])
+					name: (self valueAt: #name in: each ifAbsent: [ 'unknown' ])
+					arguments: (self parsedJSONObjectFromString: (self
+						valueAt: #arguments
+						in: each
+						ifAbsent: [ '{}' ]))) ].
+		type = 'reasoning' ifTrue: [
+			summary := String streamContents: [ :stream |
+				(self valueAt: #summary in: each ifAbsent: [ #() ])
+					doWithIndex: [ :part :index |
+						index > 1 ifTrue: [ stream nextPut: Character lf ].
+						stream
+							nextPutAll: (self valueAt: #text in: part ifAbsent: [ '' ]) ] ].
+			summary ifNotEmpty: [
+				outputItems add: (SloptalkLLMOutputItem reasoningText: summary) ] ] ].
+
+	outputItems ifNotEmpty: [ ^ outputItems asArray ].
+
+	outputText := self valueAt: #output_text in: aDictionary ifAbsent: [ nil ].
+	outputText ifNotNil: [
+		normalizedText := self normalizeContent: outputText.
+		normalizedText ifNotEmpty: [
+			^ { SloptalkLLMOutputItem assistantText: normalizedText } ] ].
+	^ #()
+]
+
+{ #category : 'private' }
+SloptalkCodexOAuthProvider >> usageFromPayload: aDictionary [
+	| usage promptTokens completionTokens totalTokens |
+	usage := self valueAt: #usage in: aDictionary ifAbsent: [ Dictionary new ].
+	promptTokens := self valueAt: #input_tokens in: usage ifAbsent: [ 0 ].
+	completionTokens := self valueAt: #output_tokens in: usage ifAbsent: [ 0 ].
+	totalTokens := self
+		valueAt: #total_tokens
+		in: usage
+		ifAbsent: [ promptTokens + completionTokens ].
+	^ SloptalkLLMUsage
+		promptTokens: promptTokens
+		completionTokens: completionTokens
+		totalTokens: totalTokens
 ]
 
 { #category : 'accessing' }

@@ -46,6 +46,27 @@ SloptalkMessage >> asTranscriptLine [
 	^ role , ': ' , self displayText
 ]
 
+{ #category : 'converting' }
+SloptalkMessage >> asLLMInputItem [
+	self isToolCallMessage ifTrue: [
+		^ SloptalkLLMInputItem
+			toolCallId: self toolCallId
+			name: self toolName
+			arguments: self toolArguments
+			text: text ].
+
+	self isToolResult ifTrue: [
+		^ SloptalkLLMInputItem
+			toolResultCallId: self toolCallId
+			name: self toolName
+			text: text
+			isError: (self valueAt: #isError ifAbsent: [ false ]) ].
+
+	^ SloptalkLLMInputItem
+		messageRole: role
+		text: text
+]
+
 { #category : 'accessing' }
 SloptalkMessage >> details [
 	^ details
