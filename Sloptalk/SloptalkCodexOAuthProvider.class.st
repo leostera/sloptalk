@@ -178,7 +178,7 @@ SloptalkCodexOAuthProvider >> requestBodyForRequest: aSloptalkLLMRequest [
 
 { #category : 'private' }
 SloptalkCodexOAuthProvider >> responsePayloadFromEventStream: aString [
-	| completedEvent failedEvent payload |
+	| completedEvent failedEvent payload streamedText |
 	failedEvent := self
 		serverSentEventNamed: 'response.failed'
 		in: aString.
@@ -192,7 +192,11 @@ SloptalkCodexOAuthProvider >> responsePayloadFromEventStream: aString [
 		self error: 'Codex stream did not include response.completed' ].
 
 	payload := STONJSON fromString: completedEvent.
-	^ self valueAt: #response in: payload ifAbsent: [ payload ]
+	payload := self valueAt: #response in: payload ifAbsent: [ payload ].
+	streamedText := self streamedOutputTextFromEventStream: aString.
+	streamedText ifNotEmpty: [
+		self mergeStreamedOutputText: streamedText intoPayload: payload ].
+	^ payload
 ]
 
 { #category : 'private' }
@@ -288,13 +292,15 @@ SloptalkCodexOAuthProvider >> outputItemsFromPayload: aDictionary [
 			summary ifNotEmpty: [
 				outputItems add: (SloptalkLLMOutputItem reasoningText: summary) ] ] ].
 
-	outputItems ifNotEmpty: [ ^ outputItems asArray ].
-
 	outputText := self valueAt: #output_text in: aDictionary ifAbsent: [ nil ].
 	outputText ifNotNil: [
 		normalizedText := self normalizeContent: outputText.
-		normalizedText ifNotEmpty: [
-			^ { SloptalkLLMOutputItem assistantText: normalizedText } ] ].
+		(normalizedText isEmpty not
+			and: [ (outputItems anySatisfy: [ :each | each isMessage and: [ each text isEmpty not ] ]) not ]) ifTrue: [
+			outputItems add: (SloptalkLLMOutputItem assistantText: normalizedText) ] ].
+
+	outputItems ifNotEmpty: [ ^ outputItems asArray ].
+
 	^ #()
 ]
 
@@ -316,21 +322,29 @@ SloptalkCodexOAuthProvider >> usageFromPayload: aDictionary [
 
 { #category : 'accessing' }
 SloptalkCodexOAuthProvider >> serverSentEventNamed: anEventName in: aString [
-	| stream line currentEvent currentData |
+	| matches |
+	matches := self
+		serverSentEventDataValuesNamed: anEventName
+		in: aString.
+	^ matches
+		ifEmpty: [ nil ]
+		ifNotEmpty: [ :items | items first ]
+]
+
+{ #category : 'accessing' }
+SloptalkCodexOAuthProvider >> serverSentEventDataValuesNamed: anEventName in: aString [
+	| stream line currentEvent currentData matches |
 	stream := ReadStream on: (self normalizedEventStreamString: aString).
 	currentEvent := nil.
 	currentData := OrderedCollection new.
+	matches := OrderedCollection new.
 
 	[ stream atEnd ] whileFalse: [
 		line := stream upTo: Character lf.
 		line isEmpty
 			ifTrue: [
 				(currentEvent = anEventName and: [ currentData isNotEmpty ]) ifTrue: [
-					^ String streamContents: [ :out |
-						currentData
-							doWithIndex: [ :each :index |
-								index > 1 ifTrue: [ out nextPut: Character lf ].
-								out nextPutAll: each ] ] ].
+					matches add: (self serverSentEventTextFromDataLines: currentData) ].
 				currentEvent := nil.
 				currentData := OrderedCollection new ]
 			ifFalse: [
@@ -344,13 +358,9 @@ SloptalkCodexOAuthProvider >> serverSentEventNamed: anEventName in: aString [
 						prefixSize: 5) ] ] ].
 
 	(currentEvent = anEventName and: [ currentData isNotEmpty ]) ifTrue: [
-		^ String streamContents: [ :out |
-			currentData
-				doWithIndex: [ :each :index |
-					index > 1 ifTrue: [ out nextPut: Character lf ].
-					out nextPutAll: each ] ] ].
+		matches add: (self serverSentEventTextFromDataLines: currentData) ].
 
-	^ nil
+	^ matches asArray
 ]
 
 { #category : 'private' }
@@ -366,6 +376,15 @@ SloptalkCodexOAuthProvider >> serverSentEventLineValueFrom: aString prefixSize: 
 	^ (aString copyFrom: anInteger + 1 to: aString size) trimBoth
 ]
 
+{ #category : 'private' }
+SloptalkCodexOAuthProvider >> serverSentEventTextFromDataLines: aCollection [
+	^ String streamContents: [ :out |
+		aCollection
+			doWithIndex: [ :each :index |
+				index > 1 ifTrue: [ out nextPut: Character lf ].
+				out nextPutAll: each ] ]
+]
+
 { #category : 'accessing' }
 SloptalkCodexOAuthProvider >> session [
 	^ session
@@ -374,6 +393,36 @@ SloptalkCodexOAuthProvider >> session [
 { #category : 'accessing' }
 SloptalkCodexOAuthProvider >> session: aSloptalkCodexSession [
 	session := aSloptalkCodexSession
+]
+
+{ #category : 'private' }
+SloptalkCodexOAuthProvider >> mergeStreamedOutputText: aString intoPayload: aDictionary [
+	| existingText normalizedExisting |
+	existingText := self valueAt: #output_text in: aDictionary ifAbsent: [ nil ].
+	normalizedExisting := existingText
+		ifNil: [ '' ]
+		ifNotNil: [ self normalizeContent: existingText ].
+	normalizedExisting ifEmpty: [
+		aDictionary at: #output_text put: aString ].
+	aDictionary at: #sloptalk_streamed_output_text put: aString
+]
+
+{ #category : 'private' }
+SloptalkCodexOAuthProvider >> streamedOutputTextFromEventStream: aString [
+	| eventValues |
+	eventValues := self
+		serverSentEventDataValuesNamed: 'response.output_text.delta'
+		in: aString.
+	^ String streamContents: [ :stream |
+		eventValues do: [ :each |
+			| payload delta |
+			payload := [ STONJSON fromString: each ]
+				on: Error
+				do: [ :error | nil ].
+			delta := payload
+				ifNil: [ '' ]
+				ifNotNil: [ self valueAt: #delta in: payload ifAbsent: [ '' ] ].
+			stream nextPutAll: delta ] ]
 ]
 
 { #category : 'private' }
