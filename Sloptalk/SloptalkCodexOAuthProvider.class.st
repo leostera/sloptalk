@@ -29,12 +29,15 @@ SloptalkCodexOAuthProvider >> assistantTextFromOutputItems: outputItems [
 
 { #category : 'private' }
 SloptalkCodexOAuthProvider >> assistantTextFromPayload: aDictionary [
-	| outputText output |
+	| outputText output normalizedText |
 	outputText := self valueAt: #output_text in: aDictionary ifAbsent: [ nil ].
-	outputText ifNotNil: [ ^ self normalizeContent: outputText ].
+	outputText ifNotNil: [
+		normalizedText := self normalizeContent: outputText.
+		normalizedText ifNotEmpty: [ ^ normalizedText ] ].
 	output := self valueAt: #output in: aDictionary ifAbsent: [ nil ].
 	(output isCollection and: [ output isString not ]) ifTrue: [
-		^ self assistantTextFromOutputItems: output ].
+		normalizedText := self assistantTextFromOutputItems: output.
+		normalizedText ifNotEmpty: [ ^ normalizedText ] ].
 	^ self
 		error: 'Codex response did not include assistant output text'
 ]
