@@ -42,7 +42,7 @@ SloptalkCodexOAuthProvider >> assistantTextFromPayload: aDictionary [
 { #category : 'api' }
 SloptalkCodexOAuthProvider >> completeRequest: aSloptalkLLMRequest [
 	self ensureValidSession.
-	^ super completeRequest: aSloptalkLLMRequest
+	^ self completeStreamingRequest: aSloptalkLLMRequest
 ]
 
 { #category : 'defaults' }
@@ -63,6 +63,38 @@ SloptalkCodexOAuthProvider >> defaultEndpointPath [
 { #category : 'defaults' }
 SloptalkCodexOAuthProvider >> defaultModel [
 	^ 'gpt-5.3-codex'
+]
+
+{ #category : 'private' }
+SloptalkCodexOAuthProvider >> completeStreamingRequest: aSloptalkLLMRequest [
+	| client stream responseBody payload |
+	client := ZnClient new.
+	[
+		[
+			self prepareStreamingClient: client.
+			stream := client
+				post: self endpointUrl
+				contents: (self requestBodyForRequest: aSloptalkLLMRequest)
+		] on: ConnectionTimedOut do: [ :error |
+			self
+				error:
+					'Chat completion request timed out after '
+						, requestTimeoutSeconds asString
+						, ' seconds' ].
+
+		responseBody := self utf8StringFromStream: stream.
+		client isSuccess ifFalse: [
+			self
+				error:
+					'Chat completion request failed with status '
+						, client response statusLine asString
+						, (responseBody
+							ifEmpty: [ '' ]
+							ifNotEmpty: [ ': ' , responseBody ]) ].
+
+		payload := self responsePayloadFromEventStream: responseBody.
+		^ self responseFromPayload: payload
+	] ensure: [ client close ]
 ]
 
 { #category : 'accessing' }
@@ -100,6 +132,20 @@ SloptalkCodexOAuthProvider >> prepareClient: aZnClient [
 		aZnClient headerAt: 'chatgpt-account-id' put: session accountId ]
 ]
 
+{ #category : 'private' }
+SloptalkCodexOAuthProvider >> prepareStreamingClient: aZnClient [
+	| writer |
+	writer := ZnUtils defaultJSONWriter.
+	aZnClient
+		streaming: true;
+		timeout: requestTimeoutSeconds;
+		accept: ZnMimeType any;
+		contentWriter: [ :data | ZnEntity json: (writer toString: data) ];
+		setBearerAuthentication: session accessToken.
+	session accountId ifNotNil: [
+		aZnClient headerAt: 'chatgpt-account-id' put: session accountId ]
+]
+
 { #category : 'accessing' }
 SloptalkCodexOAuthProvider >> providerName [
 	^ 'Codex ChatGPT'
@@ -127,8 +173,27 @@ SloptalkCodexOAuthProvider >> requestBodyForRequest: aSloptalkLLMRequest [
 		#instructions -> aSloptalkLLMRequest systemPrompt.
 		#input -> input asArray.
 		#store -> false.
-		#stream -> false
+		#stream -> true
 	} asDictionary
+]
+
+{ #category : 'private' }
+SloptalkCodexOAuthProvider >> responsePayloadFromEventStream: aString [
+	| completedEvent failedEvent payload |
+	failedEvent := self
+		serverSentEventNamed: 'response.failed'
+		in: aString.
+	failedEvent ifNotNil: [
+		self error: 'Codex stream failed: ' , failedEvent ].
+
+	completedEvent := self
+		serverSentEventNamed: 'response.completed'
+		in: aString.
+	completedEvent ifNil: [
+		self error: 'Codex stream did not include response.completed' ].
+
+	payload := STONJSON fromString: completedEvent.
+	^ self valueAt: #response in: payload ifAbsent: [ payload ]
 ]
 
 { #category : 'private' }
@@ -163,6 +228,58 @@ SloptalkCodexOAuthProvider >> responsesInputItemFor: aSloptalkMessage [
 ]
 
 { #category : 'accessing' }
+SloptalkCodexOAuthProvider >> serverSentEventNamed: anEventName in: aString [
+	| stream line currentEvent currentData |
+	stream := ReadStream on: (self normalizedEventStreamString: aString).
+	currentEvent := nil.
+	currentData := OrderedCollection new.
+
+	[ stream atEnd ] whileFalse: [
+		line := stream upTo: Character lf.
+		line isEmpty
+			ifTrue: [
+				(currentEvent = anEventName and: [ currentData isNotEmpty ]) ifTrue: [
+					^ String streamContents: [ :out |
+						currentData
+							doWithIndex: [ :each :index |
+								index > 1 ifTrue: [ out nextPut: Character lf ].
+								out nextPutAll: each ] ] ].
+				currentEvent := nil.
+				currentData := OrderedCollection new ]
+			ifFalse: [
+				(line beginsWith: 'event:') ifTrue: [
+					currentEvent := self
+						serverSentEventLineValueFrom: line
+						prefixSize: 6 ].
+				(line beginsWith: 'data:') ifTrue: [
+					currentData add: (self
+						serverSentEventLineValueFrom: line
+						prefixSize: 5) ] ] ].
+
+	(currentEvent = anEventName and: [ currentData isNotEmpty ]) ifTrue: [
+		^ String streamContents: [ :out |
+			currentData
+				doWithIndex: [ :each :index |
+					index > 1 ifTrue: [ out nextPut: Character lf ].
+					out nextPutAll: each ] ] ].
+
+	^ nil
+]
+
+{ #category : 'private' }
+SloptalkCodexOAuthProvider >> normalizedEventStreamString: aString [
+	^ ((aString copyReplaceAll: String crlf with: String lf)
+		copyReplaceAll: String cr asString
+		with: String lf)
+]
+
+{ #category : 'private' }
+SloptalkCodexOAuthProvider >> serverSentEventLineValueFrom: aString prefixSize: anInteger [
+	aString size <= anInteger ifTrue: [ ^ '' ].
+	^ (aString copyFrom: anInteger + 1 to: aString size) trimBoth
+]
+
+{ #category : 'accessing' }
 SloptalkCodexOAuthProvider >> session [
 	^ session
 ]
@@ -170,4 +287,14 @@ SloptalkCodexOAuthProvider >> session [
 { #category : 'accessing' }
 SloptalkCodexOAuthProvider >> session: aSloptalkCodexSession [
 	session := aSloptalkCodexSession
+]
+
+{ #category : 'private' }
+SloptalkCodexOAuthProvider >> utf8StringFromStream: aStream [
+	| contents |
+	contents := aStream upToEnd.
+	contents isString ifTrue: [ ^ contents ].
+	^ [ contents utf8Decoded ]
+		on: Error
+		do: [ :error | contents asString ]
 ]
