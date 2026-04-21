@@ -62,12 +62,15 @@ SloptalkChatPresenter >> agent [
 
 { #category : 'accessing' }
 SloptalkChatPresenter >> app [
-	^ app ifNil: [ app := SloptalkApp current ]
+	app ifNil: [ app := SloptalkApp current ].
+	app ensureInitializedState.
+	^ app
 ]
 
 { #category : 'accessing' }
 SloptalkChatPresenter >> app: aSloptalkApp [
-	app := aSloptalkApp
+	app := aSloptalkApp.
+	app ensureInitializedState
 ]
 
 { #category : 'initialization' }

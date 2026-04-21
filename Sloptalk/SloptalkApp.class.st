@@ -22,7 +22,9 @@ SloptalkApp class >> agent [
 
 { #category : 'accessing' }
 SloptalkApp class >> current [
-	^ current ifNil: [ current := self new ]
+	current ifNil: [ current := self new ].
+	current ensureInitializedState.
+	^ current
 ]
 
 { #category : 'accessing' }
@@ -47,6 +49,7 @@ SloptalkApp class >> resetCurrent [
 
 { #category : 'accessing' }
 SloptalkApp >> agent [
+	self ensureInitializedState.
 	^ agent
 ]
 
@@ -57,12 +60,14 @@ SloptalkApp >> agent: aSloptalkAgent [
 
 { #category : 'accessing' }
 SloptalkApp >> announcer [
+	self ensureInitializedState.
 	^ agent announcer
 ]
 
 { #category : 'accessing' }
 SloptalkApp >> apiKey [
 	| currentApiKey |
+	self ensureInitializedState.
 	currentApiKey := agent apiKey.
 	currentApiKey ifNotNil: [ ^ currentApiKey ].
 	^ openAIApiKey
@@ -70,6 +75,7 @@ SloptalkApp >> apiKey [
 
 { #category : 'accessing' }
 SloptalkApp >> apiKey: aString [
+	self ensureInitializedState.
 	openAIApiKey := aString.
 	(self providerKind = #openAI and: [ aString isNotNil ]) ifTrue: [
 		agent apiKey: aString ]
@@ -77,6 +83,7 @@ SloptalkApp >> apiKey: aString [
 
 { #category : 'api' }
 SloptalkApp >> applySettingsProviderKind: aSymbol model: aModelString baseUrl: aBaseUrlString requestTimeoutSeconds: anInteger workspacePath: aWorkspacePathString [
+	self ensureInitializedState.
 	self
 		updateSettingsForProviderKind: aSymbol
 		model: aModelString
@@ -97,21 +104,25 @@ SloptalkApp >> applySettingsProviderKind: aSymbol model: aModelString baseUrl: a
 
 { #category : 'accessing' }
 SloptalkApp >> baseUrl [
+	self ensureInitializedState.
 	^ agent baseUrl
 ]
 
 { #category : 'accessing' }
 SloptalkApp >> baseUrl: aString [
+	self ensureInitializedState.
 	agent baseUrl: aString
 ]
 
 { #category : 'testing' }
 SloptalkApp >> busy [
+	self ensureInitializedState.
 	^ agent busy
 ]
 
 { #category : 'accessing' }
 SloptalkApp >> clearApiKey [
+	self ensureInitializedState.
 	openAIApiKey := nil.
 	self providerKind = #openAI ifTrue: [
 		agent apiKey: nil ]
@@ -119,7 +130,22 @@ SloptalkApp >> clearApiKey [
 
 { #category : 'accessing' }
 SloptalkApp >> codexLoginStatusText [
+	self ensureInitializedState.
 	^ SloptalkCodexAuth loginStatusText
+]
+
+{ #category : 'initialization' }
+SloptalkApp >> ensureInitializedState [
+	agent ifNil: [
+		agent := SloptalkAgent new ].
+	providerSettings ifNil: [
+		providerSettings := Dictionary new.
+		self initializeProviderSettings.
+		openAIApiKey ifNil: [
+			openAIApiKey := OSEnvironment current
+				at: 'OPENAI_API_KEY'
+				ifAbsent: [ nil ] ] ].
+	^ self
 ]
 
 { #category : 'initialization' }
@@ -135,26 +161,31 @@ SloptalkApp >> initialize [
 
 { #category : 'accessing' }
 SloptalkApp >> model [
+	self ensureInitializedState.
 	^ agent model
 ]
 
 { #category : 'accessing' }
 SloptalkApp >> model: aString [
+	self ensureInitializedState.
 	agent model: aString
 ]
 
 { #category : 'accessing' }
 SloptalkApp >> provider [
+	self ensureInitializedState.
 	^ agent provider
 ]
 
 { #category : 'accessing' }
 SloptalkApp >> providerChoices [
+	self ensureInitializedState.
 	^ #(#localOllama #openAI)
 ]
 
 { #category : 'accessing' }
 SloptalkApp >> providerDisplayNameFor: aSymbol [
+	self ensureInitializedState.
 	aSymbol = #localOllama ifTrue: [ ^ 'Local Ollama' ].
 	aSymbol = #openAI ifTrue: [ ^ 'OpenAI API' ].
 	^ aSymbol asString
@@ -162,16 +193,19 @@ SloptalkApp >> providerDisplayNameFor: aSymbol [
 
 { #category : 'accessing' }
 SloptalkApp >> provider: aSloptalkLLMProvider [
+	self ensureInitializedState.
 	agent provider: aSloptalkLLMProvider
 ]
 
 { #category : 'accessing' }
 SloptalkApp >> providerDescription [
+	self ensureInitializedState.
 	^ agent providerDescription
 ]
 
 { #category : 'accessing' }
 SloptalkApp >> providerKind [
+	self ensureInitializedState.
 	(agent provider isKindOf: SloptalkLocalOllamaProvider) ifTrue: [ ^ #localOllama ].
 	(agent provider isKindOf: SloptalkOpenAIProvider) ifTrue: [ ^ #openAI ].
 	^ #openAI
@@ -179,52 +213,62 @@ SloptalkApp >> providerKind [
 
 { #category : 'accessing' }
 SloptalkApp >> requestTimeoutSeconds [
+	self ensureInitializedState.
 	^ agent requestTimeoutSeconds
 ]
 
 { #category : 'accessing' }
 SloptalkApp >> requestTimeoutSeconds: anInteger [
+	self ensureInitializedState.
 	agent requestTimeoutSeconds: anInteger
 ]
 
 { #category : 'api' }
 SloptalkApp >> resetConversation [
+	self ensureInitializedState.
 	agent resetConversation
 ]
 
 { #category : 'api' }
 SloptalkApp >> startCodexDeviceLogin [
+	self ensureInitializedState.
 	^ SloptalkCodexAuth openDeviceLogin
 ]
 
 { #category : 'api' }
 SloptalkApp >> send: aString [
+	self ensureInitializedState.
 	^ agent send: aString
 ]
 
 { #category : 'api' }
 SloptalkApp >> sendAndWait: aString [
+	self ensureInitializedState.
 	^ agent sendAndWait: aString
 ]
 
 { #category : 'printing' }
 SloptalkApp >> transcriptString [
+	self ensureInitializedState.
 	^ agent transcriptString
 ]
 
 { #category : 'accessing' }
 SloptalkApp >> workspacePath [
+	self ensureInitializedState.
 	^ agent workspacePath
 ]
 
 { #category : 'accessing' }
 SloptalkApp >> workspacePath: aString [
+	self ensureInitializedState.
 	agent workspacePath: aString
 ]
 
 { #category : 'accessing' }
 SloptalkApp >> apiKeyStatusText [
 	| apiKey |
+	self ensureInitializedState.
 	apiKey := self apiKey.
 	(apiKey isNil or: [ apiKey trimBoth isEmpty ]) ifTrue: [
 		^ 'API key: missing' ].
@@ -233,6 +277,7 @@ SloptalkApp >> apiKeyStatusText [
 
 { #category : 'accessing' }
 SloptalkApp >> baseUrlForProviderKind: aSymbol [
+	self ensureInitializedState.
 	^ (providerSettings
 		at: aSymbol
 		ifAbsent: [ self error: 'Unknown provider kind: ' , aSymbol asString ])
@@ -257,6 +302,7 @@ SloptalkApp >> initializeProviderSettings [
 
 { #category : 'accessing' }
 SloptalkApp >> modelForProviderKind: aSymbol [
+	self ensureInitializedState.
 	^ (providerSettings
 		at: aSymbol
 		ifAbsent: [ self error: 'Unknown provider kind: ' , aSymbol asString ])
@@ -265,12 +311,14 @@ SloptalkApp >> modelForProviderKind: aSymbol [
 
 { #category : 'api' }
 SloptalkApp >> openCodexAuthenticationDocs [
+	self ensureInitializedState.
 	^ SloptalkCodexAuth openAuthenticationDocs
 ]
 
 { #category : 'accessing' }
 SloptalkApp >> updateSettingsForProviderKind: aSymbol model: aModelString baseUrl: aBaseUrlString [
 	| settings |
+	self ensureInitializedState.
 	settings := providerSettings
 		at: aSymbol
 		ifAbsent: [ self error: 'Unknown provider kind: ' , aSymbol asString ].

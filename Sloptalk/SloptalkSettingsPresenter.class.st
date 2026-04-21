@@ -59,12 +59,15 @@ SloptalkSettingsPresenter class >> registerToolsOn: registry [
 
 { #category : 'accessing' }
 SloptalkSettingsPresenter >> app [
-	^ app ifNil: [ app := SloptalkApp current ]
+	app ifNil: [ app := SloptalkApp current ].
+	app ensureInitializedState.
+	^ app
 ]
 
 { #category : 'accessing' }
 SloptalkSettingsPresenter >> app: aSloptalkApp [
-	app := aSloptalkApp
+	app := aSloptalkApp.
+	app ensureInitializedState
 ]
 
 { #category : 'actions' }
