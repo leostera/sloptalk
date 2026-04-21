@@ -56,6 +56,35 @@ SloptalkApp >> agent [
 	^ agent
 ]
 
+{ #category : 'debugging' }
+SloptalkApp >> debugTranscriptPlaygroundContents [
+	self ensureInitializedState.
+	^ String streamContents: [ :stream |
+		stream
+			nextPutAll: '"Sloptalk transcript debugging"';
+			nextPut: Character lf;
+			nextPutAll: 'app := SloptalkApp current.';
+			nextPut: Character lf;
+			nextPutAll: 'agent := app agent.';
+			nextPut: Character lf;
+			nextPutAll: 'conversation := agent conversation.';
+			nextPut: Character lf;
+			nextPutAll: 'transcript := app transcriptString.';
+			nextPut: Character lf;
+			nextPutAll: 'messages := app transcriptMessages.';
+			nextPut: Character lf;
+			nextPut: Character lf;
+			nextPutAll: '"Evaluate one of these:"';
+			nextPut: Character lf;
+			nextPutAll: 'transcript';
+			nextPut: Character lf;
+			nextPutAll: 'messages';
+			nextPut: Character lf;
+			nextPutAll: 'messages collect: [ :each | { each role. each text. each details } ]';
+			nextPut: Character lf;
+			nextPutAll: 'messages last ifNotNil: [ :each | each details ]' ]
+]
+
 { #category : 'accessing' }
 SloptalkApp >> agent: aSloptalkAgent [
 	agent := aSloptalkAgent
@@ -412,6 +441,14 @@ SloptalkApp >> openCodexAuthenticationDocs [
 	^ SloptalkCodexAuth openAuthenticationDocs
 ]
 
+{ #category : 'debugging' }
+SloptalkApp >> openTranscriptPlayground [
+	self ensureInitializedState.
+	UIManager default defer: [
+		(Smalltalk tools toolNamed: #workspace)
+			openContents: self debugTranscriptPlaygroundContents ]
+]
+
 { #category : 'accessing' }
 SloptalkApp >> provider [
 	self ensureInitializedState.
@@ -596,6 +633,12 @@ SloptalkApp >> startCodexDeviceLogin [
 SloptalkApp >> transcriptString [
 	self ensureInitializedState.
 	^ agent transcriptString
+]
+
+{ #category : 'debugging' }
+SloptalkApp >> transcriptMessages [
+	self ensureInitializedState.
+	^ agent conversation messages
 ]
 
 { #category : 'accessing' }

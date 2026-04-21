@@ -9,6 +9,7 @@ Class {
 		'inputPresenter',
 		'statusLabel',
 		'newChatButton',
+		'transcriptButton',
 		'settingsButton',
 		'sendButton'
 	],
@@ -77,6 +78,7 @@ SloptalkChatPresenter >> app: aSloptalkApp [
 SloptalkChatPresenter >> connectPresenters [
 	sendButton action: [ self sendCurrentPrompt ].
 	newChatButton action: [ self resetConversation ].
+	transcriptButton action: [ self openTranscriptDebugging ].
 	settingsButton action: [ self openSettings ].
 	inputPresenter whenTextChangedDo: [ :text | self updateSendButton ].
 	self subscribeToAgent.
@@ -94,6 +96,7 @@ SloptalkChatPresenter >> defaultLayout [
 				spacing: 5;
 				add: statusLabel;
 				add: newChatButton expand: false;
+				add: transcriptButton expand: false;
 				add: settingsButton expand: false;
 				add: sendButton expand: false;
 				yourself)
@@ -131,6 +134,10 @@ SloptalkChatPresenter >> initializePresenters [
 
 	newChatButton := self newButton
 		label: 'New Chat';
+		yourself.
+
+	transcriptButton := self newButton
+		label: 'Transcript';
 		yourself.
 
 	settingsButton := self newButton
@@ -173,6 +180,11 @@ SloptalkChatPresenter >> resetConversation [
 { #category : 'actions' }
 SloptalkChatPresenter >> openSettings [
 	SloptalkSettingsPresenter openForApp: self app
+]
+
+{ #category : 'actions' }
+SloptalkChatPresenter >> openTranscriptDebugging [
+	self app openTranscriptPlayground
 ]
 
 { #category : 'actions' }
