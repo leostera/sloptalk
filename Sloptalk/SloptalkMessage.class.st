@@ -39,6 +39,14 @@ SloptalkMessage >> asTranscriptLine [
 	^ role , ': ' , text
 ]
 
+{ #category : 'converting' }
+SloptalkMessage >> asChatCompletionMessage [
+	^ {
+		#role -> role.
+		#content -> text
+	} asDictionary
+]
+
 { #category : 'accessing' }
 SloptalkMessage >> role [
 	^ role

@@ -22,6 +22,16 @@ SloptalkAgent >> bridge: aSloptalkCodexBridge [
 ]
 
 { #category : 'accessing' }
+SloptalkAgent >> model [
+	^ bridge model
+]
+
+{ #category : 'accessing' }
+SloptalkAgent >> model: aString [
+	bridge model: aString
+]
+
+{ #category : 'accessing' }
 SloptalkAgent >> conversation [
 	^ conversation
 ]
@@ -45,6 +55,16 @@ SloptalkAgent >> receiveUserMessage: aString [
 { #category : 'printing' }
 SloptalkAgent >> transcriptString [
 	^ conversation transcriptString
+]
+
+{ #category : 'accessing' }
+SloptalkAgent >> baseUrl [
+	^ bridge baseUrl
+]
+
+{ #category : 'accessing' }
+SloptalkAgent >> baseUrl: aString [
+	bridge baseUrl: aString
 ]
 
 { #category : 'accessing' }
