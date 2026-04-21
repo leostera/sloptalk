@@ -106,16 +106,26 @@ SloptalkCodexOAuthProvider >> providerName [
 
 { #category : 'private' }
 SloptalkCodexOAuthProvider >> requestBodyFor: aConversation systemPrompt: aString [
-	| input body |
-	input := aConversation messages collect: [ :each | each asResponsesInputMessage ].
-	body := {
+	| input |
+	input := OrderedCollection new.
+	aString ifNotEmpty: [
+		input add: ({
+			#type -> 'message'.
+			#role -> 'system'.
+			#content -> {
+				{
+					#type -> 'input_text'.
+					#text -> aString
+				} asDictionary
+			}
+		} asDictionary) ].
+	input addAll: (aConversation messages collect: [ :each | each asResponsesInputMessage ]).
+
+	^ {
 		#model -> model.
 		#input -> input asArray.
-		#store -> false
-	} asDictionary.
-	aString ifNotEmpty: [
-		body at: #instructions put: aString ].
-	^ body
+		#stream -> false
+	} asDictionary
 ]
 
 { #category : 'accessing' }

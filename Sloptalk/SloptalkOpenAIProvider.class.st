@@ -54,7 +54,7 @@ SloptalkOpenAIProvider >> baseUrl: aString [
 
 { #category : 'api' }
 SloptalkOpenAIProvider >> completeConversation: aConversation systemPrompt: aString [
-	| client |
+	| client responseBody |
 	client := ZnClient new.
 	[
 		[
@@ -69,7 +69,16 @@ SloptalkOpenAIProvider >> completeConversation: aConversation systemPrompt: aStr
 						, requestTimeoutSeconds asString
 						, ' seconds' ].
 		client isSuccess ifFalse: [
-			self error: 'Chat completion request failed with status ' , client response statusLine asString ].
+			responseBody := [ client response entity contents ]
+				on: Error
+				do: [ :error | '' ].
+			self
+				error:
+					'Chat completion request failed with status '
+						, client response statusLine asString
+						, (responseBody
+							ifEmpty: [ '' ]
+							ifNotEmpty: [ ': ' , responseBody ]) ].
 		^ self assistantTextFromResponse: client contents
 	] ensure: [ client close ]
 ]

@@ -64,13 +64,27 @@ SloptalkMessage >> asChatCompletionMessage [
 SloptalkMessage >> asResponsesInputMessage [
 	role = 'toolResult' ifTrue: [
 		^ {
+			#type -> 'message'.
 			#role -> 'user'.
-			#content -> self toolResultPromptText
+			#content -> {
+				{
+					#type -> 'input_text'.
+					#text -> self toolResultPromptText
+				} asDictionary
+			}
 		} asDictionary ].
 
 	^ {
+		#type -> 'message'.
 		#role -> role.
-		#content -> text
+		#content -> {
+			{
+				#type -> (role = 'assistant'
+					ifTrue: [ 'output_text' ]
+					ifFalse: [ 'input_text' ]).
+				#text -> text
+			} asDictionary
+		}
 	} asDictionary
 ]
 
