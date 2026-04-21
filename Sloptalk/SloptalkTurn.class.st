@@ -56,6 +56,15 @@ SloptalkTurn >> isFinished [
 	^ (status = 'completed') or: [ status = 'failed' ]
 ]
 
+{ #category : 'testing' }
+SloptalkTurn >> isMorphicUIProcessActive [
+	| uiManagerClass |
+	uiManagerClass := Smalltalk globals
+		at: #MorphicUIManager
+		ifAbsent: [ ^ false ].
+	^ uiManagerClass uiProcess == Processor activeProcess
+]
+
 { #category : 'lifecycle' }
 SloptalkTurn >> markCompletedWith: aString [
 	reply := aString.
@@ -99,7 +108,10 @@ SloptalkTurn >> status [
 
 { #category : 'waiting' }
 SloptalkTurn >> wait [
-	self isFinished ifFalse: [ doneSemaphore wait ].
+	self isFinished ifFalse: [
+		self isMorphicUIProcessActive
+			ifTrue: [ self waitWhilePumpingMorphicUi ]
+			ifFalse: [ doneSemaphore wait ] ].
 	^ self
 ]
 
@@ -108,4 +120,18 @@ SloptalkTurn >> waitForReply [
 	self wait.
 	self isFailed ifTrue: [ Error signal: errorText ].
 	^ reply
+]
+
+{ #category : 'waiting' }
+SloptalkTurn >> waitWhilePumpingMorphicUi [
+	| renderLoopClass renderLoop |
+	renderLoopClass := Smalltalk globals
+		at: #MorphicRenderLoop
+		ifAbsent: [ doneSemaphore wait. ^ self ].
+	renderLoop := renderLoopClass new.
+	[ self isFinished ] whileFalse: [
+		doneSemaphore waitTimeoutMilliseconds: 25.
+		renderLoop doOneCycle.
+		Processor yield ].
+	^ self
 ]
