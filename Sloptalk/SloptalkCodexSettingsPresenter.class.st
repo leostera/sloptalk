@@ -142,7 +142,7 @@ SloptalkCodexSettingsPresenter >> refreshFromApp [
 	statusLabel label: status.
 	codeLabel label: (userCode
 		ifNil: [ '' ]
-		ifNotNil: [ 'Device code: ' , userCode ]).
+		ifNotNil: [ 'Enter this code at OpenAI: ' , userCode ]).
 
 	connectButton enabled: self app codexAuthCanStart.
 	openButton enabled: canOpen.

@@ -95,6 +95,21 @@ SloptalkApp >> apiKeyStatusText [
 ]
 
 { #category : 'private' }
+SloptalkApp >> codexDeviceCodePromptTextFor: aDictionary [
+	^ String streamContents: [ :stream |
+		stream
+			nextPutAll: 'Enter this device code at OpenAI:';
+			nextPut: Character lf;
+			nextPut: Character lf;
+			nextPutAll: (aDictionary at: #userCode);
+			nextPut: Character lf;
+			nextPut: Character lf;
+			nextPutAll: 'Verification URL:';
+			nextPut: Character lf;
+			nextPutAll: (aDictionary at: #verificationUrl) ]
+]
+
+{ #category : 'private' }
 SloptalkApp >> announceCodexAuthChanged [
 	self announcer announce: (SloptalkCodexAuthAnnouncement
 		app: self
@@ -507,7 +522,8 @@ SloptalkApp >> startCodexDeviceLogin [
 					verificationUrl: (deviceCode at: #verificationUrl).
 				self announceCodexAuthChanged.
 				UIManager default defer: [
-					WebBrowser openOn: (deviceCode at: #verificationUrl) ].
+					WebBrowser openOn: (deviceCode at: #verificationUrl).
+					UIManager default inform: (self codexDeviceCodePromptTextFor: deviceCode) ].
 
 				maxAttempts := ((15 * 60) / interval) ceiling.
 				1 to: maxAttempts do: [ :attempt |
