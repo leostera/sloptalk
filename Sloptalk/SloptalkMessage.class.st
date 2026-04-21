@@ -46,48 +46,6 @@ SloptalkMessage >> asTranscriptLine [
 	^ role , ': ' , self displayText
 ]
 
-{ #category : 'converting' }
-SloptalkMessage >> asChatCompletionMessage [
-	role = 'toolResult' ifTrue: [
-		^ {
-			#role -> 'user'.
-			#content -> self toolResultPromptText
-		} asDictionary ].
-
-	^ {
-		#role -> role.
-		#content -> text
-	} asDictionary
-]
-
-{ #category : 'converting' }
-SloptalkMessage >> asResponsesInputMessage [
-	role = 'toolResult' ifTrue: [
-		^ {
-			#type -> 'message'.
-			#role -> 'user'.
-			#content -> {
-				{
-					#type -> 'input_text'.
-					#text -> self toolResultPromptText
-				} asDictionary
-			}
-		} asDictionary ].
-
-	^ {
-		#type -> 'message'.
-		#role -> role.
-		#content -> {
-			{
-				#type -> (role = 'assistant'
-					ifTrue: [ 'output_text' ]
-					ifFalse: [ 'input_text' ]).
-				#text -> text
-			} asDictionary
-		}
-	} asDictionary
-]
-
 { #category : 'accessing' }
 SloptalkMessage >> details [
 	^ details
@@ -100,17 +58,11 @@ SloptalkMessage >> details: aDictionary [
 
 { #category : 'printing' }
 SloptalkMessage >> displayText [
-	| type toolName arguments |
-	role = 'assistant' ifTrue: [
-		type := self valueAt: #type ifAbsent: [ nil ].
-		type = 'tool_call' ifTrue: [
-			toolName := self valueAt: #tool ifAbsent: [ 'unknown' ].
-			arguments := self valueAt: #arguments ifAbsent: [ Dictionary new ].
-			^ 'tool(' , toolName , '): ' , arguments printString ] ].
+	self isToolCallMessage ifTrue: [
+		^ 'tool(' , (self toolName ifNil: [ 'unknown' ]) , '): ' , self toolArguments printString ].
 
-	role = 'toolResult' ifTrue: [
-		toolName := self valueAt: #tool ifAbsent: [ 'unknown' ].
-		^ 'tool(' , toolName , '): ' , text ].
+	self isToolResult ifTrue: [
+		^ 'tool(' , (self toolName ifNil: [ 'unknown' ]) , '): ' , text ].
 
 	^ text
 ]
@@ -125,6 +77,21 @@ SloptalkMessage >> role: aString [
 	role := aString
 ]
 
+{ #category : 'testing' }
+SloptalkMessage >> isToolCallMessage [
+	^ role = 'assistant' and: [ (self valueAt: #type ifAbsent: [ nil ]) = 'tool_call' ]
+]
+
+{ #category : 'testing' }
+SloptalkMessage >> isToolResult [
+	^ role = 'toolResult'
+]
+
+{ #category : 'accessing' }
+SloptalkMessage >> responseId [
+	^ self valueAt: #response_id ifAbsent: [ nil ]
+]
+
 { #category : 'accessing' }
 SloptalkMessage >> text [
 	^ text
@@ -135,10 +102,25 @@ SloptalkMessage >> text: aString [
 	text := aString
 ]
 
+{ #category : 'accessing' }
+SloptalkMessage >> toolArguments [
+	^ self valueAt: #arguments ifAbsent: [ Dictionary new ]
+]
+
+{ #category : 'accessing' }
+SloptalkMessage >> toolCallId [
+	^ self valueAt: #call_id ifAbsent: [ nil ]
+]
+
+{ #category : 'accessing' }
+SloptalkMessage >> toolName [
+	^ self valueAt: #tool ifAbsent: [ nil ]
+]
+
 { #category : 'private' }
 SloptalkMessage >> toolResultPromptText [
 	| toolName status |
-	toolName := self valueAt: #tool ifAbsent: [ 'unknown' ].
+	toolName := self toolName ifNil: [ 'unknown' ].
 	status := (self valueAt: #isError ifAbsent: [ false ])
 		ifTrue: [ 'error' ]
 		ifFalse: [ 'ok' ].

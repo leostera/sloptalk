@@ -1,7 +1,7 @@
 "I talk to the ChatGPT-backed Codex responses endpoint using a locally managed OAuth session."
 Class {
 	#name : 'SloptalkCodexOAuthProvider',
-	#superclass : 'SloptalkOpenAIProvider',
+	#superclass : 'SloptalkHTTPJSONProvider',
 	#instVars : [
 		'session'
 	],
@@ -28,20 +28,21 @@ SloptalkCodexOAuthProvider >> assistantTextFromOutputItems: outputItems [
 ]
 
 { #category : 'private' }
-SloptalkCodexOAuthProvider >> assistantTextFromResponse: aDictionary [
+SloptalkCodexOAuthProvider >> assistantTextFromPayload: aDictionary [
 	| outputText output |
 	outputText := self valueAt: #output_text in: aDictionary ifAbsent: [ nil ].
 	outputText ifNotNil: [ ^ self normalizeContent: outputText ].
 	output := self valueAt: #output in: aDictionary ifAbsent: [ nil ].
 	(output isCollection and: [ output isString not ]) ifTrue: [
 		^ self assistantTextFromOutputItems: output ].
-	^ super assistantTextFromResponse: aDictionary
+	^ self
+		error: 'Codex response did not include assistant output text'
 ]
 
 { #category : 'api' }
-SloptalkCodexOAuthProvider >> completeConversation: aConversation systemPrompt: aString [
+SloptalkCodexOAuthProvider >> completeRequest: aSloptalkLLMRequest [
 	self ensureValidSession.
-	^ super completeConversation: aConversation systemPrompt: aString
+	^ super completeRequest: aSloptalkLLMRequest
 ]
 
 { #category : 'defaults' }
@@ -105,15 +106,58 @@ SloptalkCodexOAuthProvider >> providerName [
 ]
 
 { #category : 'private' }
-SloptalkCodexOAuthProvider >> requestBodyFor: aConversation systemPrompt: aString [
+SloptalkCodexOAuthProvider >> callIdForMessage: aSloptalkMessage [
+	^ aSloptalkMessage toolCallId
+		ifNil: [ 'call_' , (aSloptalkMessage toolName ifNil: [ 'unknown' ]) ]
+]
+
+{ #category : 'private' }
+SloptalkCodexOAuthProvider >> jsonStringFromArguments: anObject [
+	anObject isString ifTrue: [ ^ anObject ].
+	^ STONJSON toString: anObject
+]
+
+{ #category : 'private' }
+SloptalkCodexOAuthProvider >> requestBodyForRequest: aSloptalkLLMRequest [
 	| input |
-	input := aConversation messages collect: [ :each | each asResponsesInputMessage ].
+	input := aSloptalkLLMRequest messages collect: [ :each | self responsesInputItemFor: each ].
 
 	^ {
 		#model -> model.
-		#instructions -> aString.
+		#instructions -> aSloptalkLLMRequest systemPrompt.
 		#input -> input asArray.
 		#stream -> false
+	} asDictionary
+]
+
+{ #category : 'private' }
+SloptalkCodexOAuthProvider >> responsesInputItemFor: aSloptalkMessage [
+	aSloptalkMessage isToolCallMessage ifTrue: [
+		^ {
+			#type -> 'function_call'.
+			#call_id -> (self callIdForMessage: aSloptalkMessage).
+			#name -> (aSloptalkMessage toolName ifNil: [ 'unknown' ]).
+			#arguments -> (self jsonStringFromArguments: aSloptalkMessage toolArguments)
+		} asDictionary ].
+
+	aSloptalkMessage isToolResult ifTrue: [
+		^ {
+			#type -> 'function_call_output'.
+			#call_id -> (self callIdForMessage: aSloptalkMessage).
+			#output -> aSloptalkMessage text
+		} asDictionary ].
+
+	^ {
+		#type -> 'message'.
+		#role -> aSloptalkMessage role.
+		#content -> {
+			{
+				#type -> (aSloptalkMessage role = 'assistant'
+					ifTrue: [ 'output_text' ]
+					ifFalse: [ 'input_text' ]).
+				#text -> aSloptalkMessage text
+			} asDictionary
+		}
 	} asDictionary
 ]
 

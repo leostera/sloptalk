@@ -13,6 +13,12 @@ Class {
 
 { #category : 'api' }
 SloptalkLLMProvider >> completeConversation: aConversation systemPrompt: aString [
+	^ self
+		completeRequest: (self requestForConversation: aConversation systemPrompt: aString)
+]
+
+{ #category : 'api' }
+SloptalkLLMProvider >> completeRequest: aSloptalkLLMRequest [
 	self subclassResponsibility
 ]
 
@@ -51,6 +57,13 @@ SloptalkLLMProvider >> model: aString [
 { #category : 'accessing' }
 SloptalkLLMProvider >> providerName [
 	^ self class name
+]
+
+{ #category : 'private' }
+SloptalkLLMProvider >> requestForConversation: aConversation systemPrompt: aString [
+	^ SloptalkLLMRequest
+		systemPrompt: aString
+		messages: aConversation messages
 ]
 
 { #category : 'accessing' }

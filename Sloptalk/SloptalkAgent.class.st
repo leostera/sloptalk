@@ -87,16 +87,25 @@ SloptalkAgent >> provider: aSloptalkLLMProvider [
 ]
 
 { #category : 'private' }
-SloptalkAgent >> decisionFromResponse: aString [
+SloptalkAgent >> assistantMessageDetailsFromDecision: aDecision response: aSloptalkLLMResponse [
+	| details |
+	details := aSloptalkLLMResponse metadata copy.
+	aDecision keysAndValuesDo: [ :key :value |
+		details at: key put: value ].
+	^ details
+]
+
+{ #category : 'private' }
+SloptalkAgent >> decisionFromResponse: aSloptalkLLMResponse [
 	| normalized |
-	normalized := self normalizedJsonTextFrom: aString.
+	normalized := self normalizedJsonTextFrom: aSloptalkLLMResponse text.
 
 	^ [ STONJSON fromString: normalized ]
 		on: Error
 		do: [ :error |
 			{
 				#type -> 'assistant'.
-				#message -> aString
+				#message -> aSloptalkLLMResponse text
 			} asDictionary ]
 ]
 
@@ -193,16 +202,24 @@ SloptalkAgent >> effectiveSystemPrompt [
 ]
 
 { #category : 'private' }
-SloptalkAgent >> executeToolDecision: aDecision rawResponse: aString [
-	| toolName arguments resultText isError |
+SloptalkAgent >> executeToolDecision: aDecision response: aSloptalkLLMResponse [
+	| toolName arguments resultText isError details callId |
 	toolName := self valueAt: #tool in: aDecision ifAbsent: [ 'unknown' ].
 	arguments := self valueAt: #arguments in: aDecision ifAbsent: [ Dictionary new ].
+	details := self
+		assistantMessageDetailsFromDecision: aDecision
+		response: aSloptalkLLMResponse.
+	callId := self
+		valueAt: #call_id
+		in: details
+		ifAbsent: [ self newToolCallId ].
+	details at: #call_id put: callId.
 
 	conversation addMessage: (
 		SloptalkMessage
 			role: 'assistant'
-			text: aString
-			details: aDecision).
+			text: aSloptalkLLMResponse text
+			details: details).
 
 	isError := false.
 	resultText := [
@@ -214,13 +231,14 @@ SloptalkAgent >> executeToolDecision: aDecision rawResponse: aString [
 
 	conversation
 		addToolResultNamed: toolName
+		callId: callId
 		text: resultText
 		isError: isError
 ]
 
 { #category : 'private' }
-SloptalkAgent >> finalAssistantTextFrom: aDecision rawResponse: aString [
-	^ self valueAt: #message in: aDecision ifAbsent: [ aString ]
+SloptalkAgent >> finalAssistantTextFrom: aDecision response: aSloptalkLLMResponse [
+	^ self valueAt: #message in: aDecision ifAbsent: [ aSloptalkLLMResponse text ]
 ]
 
 { #category : 'private' }
@@ -313,6 +331,11 @@ SloptalkAgent >> nextPendingTurn [
 ]
 
 { #category : 'private' }
+SloptalkAgent >> newToolCallId [
+	^ 'call_' , ((conversation size + 1) asString)
+]
+
+{ #category : 'private' }
 SloptalkAgent >> packageNamed: aString [
 	^ PackageOrganizer default
 		packageNamed: aString
@@ -369,28 +392,30 @@ SloptalkAgent >> transcriptString [
 
 { #category : 'private' }
 SloptalkAgent >> runLoop [
-	| stepCount rawResponse decision type reply |
+	| stepCount llmResponse decision type reply |
 	stepCount := 0.
 
 	[ stepCount < maxSteps ] whileTrue: [
 		stepCount := stepCount + 1.
-		rawResponse := bridge
+		llmResponse := bridge
 			completeConversation: conversation
 			systemPrompt: self effectiveSystemPrompt.
-		decision := self decisionFromResponse: rawResponse.
+		decision := self decisionFromResponse: llmResponse.
 		type := self decisionTypeOf: decision.
 
 		type = 'assistant' ifTrue: [
-			reply := self finalAssistantTextFrom: decision rawResponse: rawResponse.
-			conversation addAssistantMessage: reply.
+			reply := self finalAssistantTextFrom: decision response: llmResponse.
+			conversation
+				addAssistantMessage: reply
+				details: (self assistantMessageDetailsFromDecision: decision response: llmResponse).
 			^ reply ].
 
 		type = 'tool_call' ifTrue: [
-			self executeToolDecision: decision rawResponse: rawResponse ].
+			self executeToolDecision: decision response: llmResponse ].
 
 		(type ~= 'assistant' and: [ type ~= 'tool_call' ]) ifTrue: [
-			reply := rawResponse.
-			conversation addAssistantMessage: reply.
+			reply := llmResponse text.
+			conversation addAssistantMessage: reply details: llmResponse metadata.
 			^ reply ] ].
 
 	reply := 'Stopped after reaching the maximum number of steps.'.

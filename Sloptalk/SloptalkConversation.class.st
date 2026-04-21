@@ -12,7 +12,17 @@ Class {
 
 { #category : 'adding' }
 SloptalkConversation >> addAssistantMessage: aString [
-	^ self addMessage: (SloptalkMessage assistant: aString)
+	^ self addAssistantMessage: aString details: nil
+]
+
+{ #category : 'adding' }
+SloptalkConversation >> addAssistantMessage: aString details: aDictionary [
+	^ self
+		addMessage: (
+			SloptalkMessage
+				role: 'assistant'
+				text: aString
+				details: aDictionary)
 ]
 
 { #category : 'adding' }
@@ -29,11 +39,21 @@ SloptalkConversation >> addSystemMessage: aString [
 { #category : 'adding' }
 SloptalkConversation >> addToolResultNamed: aString text: aText isError: aBoolean [
 	^ self
+		addToolResultNamed: aString
+		callId: nil
+		text: aText
+		isError: aBoolean
+]
+
+{ #category : 'adding' }
+SloptalkConversation >> addToolResultNamed: aString callId: aCallId text: aText isError: aBoolean [
+	^ self
 		addMessage: (
 			SloptalkMessage
 				role: 'toolResult'
 				text: aText
 				details: {
+					#call_id -> aCallId.
 					#tool -> aString.
 					#isError -> aBoolean
 				} asDictionary)
