@@ -566,7 +566,26 @@ SloptalkAgent >> useOpenAIProvider [
 
 { #category : 'announcing' }
 SloptalkAgent >> when: anAnnouncementClass do: aBlock [
-	^ announcer when: anAnnouncementClass do: aBlock
+	^ self
+		when: anAnnouncementClass
+		do: aBlock
+		for: aBlock
+]
+
+{ #category : 'announcing' }
+SloptalkAgent >> when: anAnnouncementClass do: aBlock for: aSubscriber [
+	^ announcer
+		when: anAnnouncementClass
+		do: aBlock
+		for: aSubscriber
+]
+
+{ #category : 'announcing' }
+SloptalkAgent >> when: anAnnouncementClass send: aSelector to: anObject [
+	^ announcer
+		when: anAnnouncementClass
+		send: aSelector
+		to: anObject
 ]
 
 { #category : 'private' }
