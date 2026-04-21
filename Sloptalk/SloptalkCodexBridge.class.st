@@ -3,84 +3,55 @@ Class {
 	#name : 'SloptalkCodexBridge',
 	#superclass : 'Object',
 	#instVars : [
-		'workspacePath',
-		'baseUrl',
-		'endpointPath',
-		'model',
-		'requestTimeoutSeconds'
+		'provider'
 	],
 	#category : 'Sloptalk-Bridge',
 	#package : 'Sloptalk',
 	#tag : 'Bridge'
 }
 
-{ #category : 'private' }
-SloptalkCodexBridge >> assistantTextFromResponse: aDictionary [
-	| choices message content |
-	choices := self
-		valueAt: #choices
-		in: aDictionary
-		ifAbsent: [ self error: 'Chat completion response did not include choices' ].
-	choices isEmpty ifTrue: [
-		self error: 'Chat completion response did not include any choices' ].
-	message := self
-		valueAt: #message
-		in: choices first
-		ifAbsent: [ self error: 'Chat completion choice did not include a message' ].
-	content := self
-		valueAt: #content
-		in: message
-		ifAbsent: [ self error: 'Chat completion message did not include content' ].
-	^ self normalizeContent: content
+{ #category : 'accessing' }
+SloptalkCodexBridge >> apiKey [
+	^ (provider respondsTo: #apiKey)
+		ifTrue: [ provider apiKey ]
+		ifFalse: [ nil ]
+]
+
+{ #category : 'accessing' }
+SloptalkCodexBridge >> apiKey: aString [
+	(provider respondsTo: #apiKey:)
+		ifFalse: [ self error: 'The current provider does not support apiKey:' ].
+	provider apiKey: aString
 ]
 
 { #category : 'accessing' }
 SloptalkCodexBridge >> baseUrl [
-	^ baseUrl
+	^ (provider respondsTo: #baseUrl)
+		ifTrue: [ provider baseUrl ]
+		ifFalse: [ nil ]
 ]
 
 { #category : 'accessing' }
 SloptalkCodexBridge >> baseUrl: aString [
-	baseUrl := aString
-]
-
-{ #category : 'private' }
-SloptalkCodexBridge >> endpointUrl [
-	^ baseUrl , endpointPath
+	(provider respondsTo: #baseUrl:)
+		ifFalse: [ self error: 'The current provider does not support baseUrl:' ].
+	provider baseUrl: aString
 ]
 
 { #category : 'accessing' }
 SloptalkCodexBridge >> model [
-	^ model
+	^ provider model
 ]
 
 { #category : 'accessing' }
 SloptalkCodexBridge >> model: aString [
-	model := aString
-]
-
-{ #category : 'private' }
-SloptalkCodexBridge >> normalizeContent: anObject [
-	anObject isString ifTrue: [ ^ anObject ].
-	(anObject isCollection and: [ anObject isString not ]) ifTrue: [
-		^ String streamContents: [ :stream |
-			anObject do: [ :part |
-				| text |
-				text := part isDictionary
-					ifTrue: [ self valueAt: #text in: part ifAbsent: [ '' ] ]
-					ifFalse: [ part asString ].
-				stream nextPutAll: text ] ] ].
-	^ anObject asString
+	provider model: aString
 ]
 
 { #category : 'initialization' }
 SloptalkCodexBridge >> initialize [
 	super initialize.
-	workspacePath := '.'.
-	baseUrl := 'http://localhost:11434'.
-	endpointPath := '/v1/chat/completions'.
-	model := 'gemma-4-31B-it-Q8_0.gguf'.
-	requestTimeoutSeconds := 600
+	provider := SloptalkLocalOllamaProvider new
 ]
 
 { #category : 'api' }
@@ -90,71 +61,27 @@ SloptalkCodexBridge >> replyTo: aString in: aConversation [
 
 { #category : 'api' }
 SloptalkCodexBridge >> completeConversation: aConversation systemPrompt: aString [
-	| client |
-	client := ZnClient new.
-	[
-		[
-			client
-				beOneShot;
-				timeout: requestTimeoutSeconds;
-				forJsonREST;
-				post: self endpointUrl contents: (self requestBodyFor: aConversation systemPrompt: aString)
-		] on: ConnectionTimedOut do: [ :error |
-			self
-				error:
-					'Chat completion request timed out after '
-						, requestTimeoutSeconds asString
-						, ' seconds' ].
-		client isSuccess ifFalse: [
-			self error: 'Chat completion request failed with status ' , client response statusLine asString ].
-		^ self assistantTextFromResponse: client contents
-	] ensure: [ client close ]
+	^ provider
+		completeConversation: aConversation
+		systemPrompt: aString
+]
+
+{ #category : 'accessing' }
+SloptalkCodexBridge >> provider [
+	^ provider
+]
+
+{ #category : 'accessing' }
+SloptalkCodexBridge >> provider: aSloptalkLLMProvider [
+	provider := aSloptalkLLMProvider
 ]
 
 { #category : 'accessing' }
 SloptalkCodexBridge >> requestTimeoutSeconds [
-	^ requestTimeoutSeconds
+	^ provider requestTimeoutSeconds
 ]
 
 { #category : 'accessing' }
 SloptalkCodexBridge >> requestTimeoutSeconds: anInteger [
-	requestTimeoutSeconds := anInteger
-]
-
-{ #category : 'private' }
-SloptalkCodexBridge >> requestBodyFor: aConversation systemPrompt: aString [
-	| messages |
-	messages := OrderedCollection new.
-	aString ifNotEmpty: [
-		messages add: ({
-			#role -> 'system'.
-			#content -> aString
-		} asDictionary) ].
-	messages addAll: (aConversation messages collect: [ :each | each asChatCompletionMessage ]).
-
-	^ {
-		#model -> model.
-		#messages -> messages asArray.
-		#stream -> false
-	} asDictionary
-]
-
-{ #category : 'private' }
-SloptalkCodexBridge >> valueAt: aKey in: aDictionary ifAbsent: aBlock [
-	^ aDictionary
-		at: aKey
-		ifAbsent: [
-			aDictionary
-				at: aKey asString
-				ifAbsent: aBlock ]
-]
-
-{ #category : 'accessing' }
-SloptalkCodexBridge >> workspacePath [
-	^ workspacePath
-]
-
-{ #category : 'accessing' }
-SloptalkCodexBridge >> workspacePath: aString [
-	workspacePath := aString
+	provider requestTimeoutSeconds: anInteger
 ]

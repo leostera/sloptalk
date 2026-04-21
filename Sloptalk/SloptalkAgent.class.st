@@ -8,6 +8,7 @@ Class {
 		'tools',
 		'maxSteps',
 		'systemPrompt',
+		'workspacePath',
 		'announcer',
 		'pendingTurns',
 		'queueLock',
@@ -73,6 +74,16 @@ SloptalkAgent >> bridge [
 { #category : 'accessing' }
 SloptalkAgent >> bridge: aSloptalkCodexBridge [
 	bridge := aSloptalkCodexBridge
+]
+
+{ #category : 'accessing' }
+SloptalkAgent >> provider [
+	^ bridge provider
+]
+
+{ #category : 'accessing' }
+SloptalkAgent >> provider: aSloptalkLLMProvider [
+	bridge provider: aSloptalkLLMProvider
 ]
 
 { #category : 'private' }
@@ -236,6 +247,7 @@ SloptalkAgent >> initialize [
 	tools := OrderedCollection new.
 	maxSteps := 8.
 	systemPrompt := self defaultSystemPrompt.
+	workspacePath := '.'.
 	announcer := Announcer new.
 	pendingTurns := OrderedCollection new.
 	queueLock := Semaphore forMutualExclusion.
@@ -453,12 +465,12 @@ SloptalkAgent >> baseUrl: aString [
 
 { #category : 'accessing' }
 SloptalkAgent >> workspacePath [
-	^ bridge workspacePath
+	^ workspacePath
 ]
 
 { #category : 'accessing' }
 SloptalkAgent >> workspacePath: aString [
-	bridge workspacePath: aString
+	workspacePath := aString
 ]
 
 { #category : 'accessing' }
@@ -517,6 +529,39 @@ SloptalkAgent >> truncateText: aString to: anInteger [
 { #category : 'announcing' }
 SloptalkAgent >> unsubscribe: anObject [
 	announcer unsubscribe: anObject
+]
+
+{ #category : 'accessing' }
+SloptalkAgent >> apiKey [
+	^ bridge apiKey
+]
+
+{ #category : 'accessing' }
+SloptalkAgent >> apiKey: aString [
+	bridge apiKey: aString
+]
+
+{ #category : 'api' }
+SloptalkAgent >> resetConversation [
+	self busy ifTrue: [
+		self error: 'Cannot reset the conversation while turns are still running.' ].
+	conversation := SloptalkConversation new.
+	lastReply := nil
+]
+
+{ #category : 'accessing' }
+SloptalkAgent >> providerDescription [
+	^ self provider displayString
+]
+
+{ #category : 'configuration' }
+SloptalkAgent >> useLocalOllamaProvider [
+	self provider: SloptalkLocalOllamaProvider new
+]
+
+{ #category : 'configuration' }
+SloptalkAgent >> useOpenAIProvider [
+	self provider: SloptalkOpenAIProvider new
 ]
 
 { #category : 'announcing' }
