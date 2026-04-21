@@ -333,7 +333,7 @@ SloptalkAgent >> processTurn: aSloptalkTurn [
 	aSloptalkTurn markRunning.
 	self announce: (SloptalkTurnStarted agent: self turn: aSloptalkTurn).
 
-	[
+	([
 		conversation addUserMessage: aSloptalkTurn prompt.
 		reply := self runLoop.
 		lastReply := reply.
@@ -344,7 +344,7 @@ SloptalkAgent >> processTurn: aSloptalkTurn [
 		lastReply := 'Error: ' , errorText.
 		conversation addAssistantMessage: 'Error: ' , errorText.
 		aSloptalkTurn markFailedWith: errorText.
-		self announce: (SloptalkTurnFailed agent: self turn: aSloptalkTurn) ]
+		self announce: (SloptalkTurnFailed agent: self turn: aSloptalkTurn) ])
 		ensure: [ isBusy := false ]
 ]
 
