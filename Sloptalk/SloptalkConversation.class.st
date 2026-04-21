@@ -27,6 +27,19 @@ SloptalkConversation >> addSystemMessage: aString [
 ]
 
 { #category : 'adding' }
+SloptalkConversation >> addToolResultNamed: aString text: aText isError: aBoolean [
+	^ self
+		addMessage: (
+			SloptalkMessage
+				role: 'toolResult'
+				text: aText
+				details: {
+					#tool -> aString.
+					#isError -> aBoolean
+				} asDictionary)
+]
+
+{ #category : 'adding' }
 SloptalkConversation >> addUserMessage: aString [
 	^ self addMessage: (SloptalkMessage user: aString)
 ]

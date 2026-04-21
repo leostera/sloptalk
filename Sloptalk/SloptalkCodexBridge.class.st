@@ -83,12 +83,17 @@ SloptalkCodexBridge >> initialize [
 
 { #category : 'api' }
 SloptalkCodexBridge >> replyTo: aString in: aConversation [
+	^ self completeConversation: aConversation systemPrompt: ''
+]
+
+{ #category : 'api' }
+SloptalkCodexBridge >> completeConversation: aConversation systemPrompt: aString [
 	| client |
 	client := ZnClient new.
 	[
 		client
 			forJsonREST;
-			post: self endpointUrl contents: (self requestBodyFor: aConversation).
+			post: self endpointUrl contents: (self requestBodyFor: aConversation systemPrompt: aString).
 		client isSuccess ifFalse: [
 			self error: 'Chat completion request failed with status ' , client response statusLine asString ].
 		^ self assistantTextFromResponse: client contents
@@ -96,10 +101,19 @@ SloptalkCodexBridge >> replyTo: aString in: aConversation [
 ]
 
 { #category : 'private' }
-SloptalkCodexBridge >> requestBodyFor: aConversation [
+SloptalkCodexBridge >> requestBodyFor: aConversation systemPrompt: aString [
+	| messages |
+	messages := OrderedCollection new.
+	aString ifNotEmpty: [
+		messages add: ({
+			#role -> 'system'.
+			#content -> aString
+		} asDictionary) ].
+	messages addAll: (aConversation messages collect: [ :each | each asChatCompletionMessage ]).
+
 	^ {
 		#model -> model.
-		#messages -> (aConversation messages collect: [ :each | each asChatCompletionMessage ]).
+		#messages -> messages asArray.
 		#stream -> false
 	} asDictionary
 ]
