@@ -9,6 +9,7 @@ Class {
 		'inputPresenter',
 		'statusLabel',
 		'newChatButton',
+		'settingsButton',
 		'sendButton'
 	],
 	#category : 'Sloptalk-UI',
@@ -73,6 +74,7 @@ SloptalkChatPresenter >> app: aSloptalkApp [
 SloptalkChatPresenter >> connectPresenters [
 	sendButton action: [ self sendCurrentPrompt ].
 	newChatButton action: [ self resetConversation ].
+	settingsButton action: [ self openSettings ].
 	inputPresenter whenTextChangedDo: [ :text | self updateSendButton ].
 	self subscribeToAgent.
 	self refreshPresenter
@@ -89,6 +91,7 @@ SloptalkChatPresenter >> defaultLayout [
 				spacing: 5;
 				add: statusLabel;
 				add: newChatButton expand: false;
+				add: settingsButton expand: false;
 				add: sendButton expand: false;
 				yourself)
 			expand: false;
@@ -122,6 +125,10 @@ SloptalkChatPresenter >> initializePresenters [
 		label: 'New Chat';
 		yourself.
 
+	settingsButton := self newButton
+		label: 'Settings';
+		yourself.
+
 	sendButton := self newButton
 		label: 'Send';
 		yourself.
@@ -153,6 +160,11 @@ SloptalkChatPresenter >> resetConversation [
 		self refreshPresenter
 	] on: Error do: [ :error |
 		self inform: error messageText ]
+]
+
+{ #category : 'actions' }
+SloptalkChatPresenter >> openSettings [
+	SloptalkSettingsPresenter openForApp: self app
 ]
 
 { #category : 'actions' }
