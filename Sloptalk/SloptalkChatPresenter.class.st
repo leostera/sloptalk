@@ -106,6 +106,11 @@ SloptalkChatPresenter >> handleTurnAnnouncement: anAnnouncement [
 	UIManager default defer: [ self refreshPresenter ]
 ]
 
+{ #category : 'announcements' }
+SloptalkChatPresenter >> handleCodexAuthAnnouncement: anAnnouncement [
+	UIManager default defer: [ self refreshPresenter ]
+]
+
 { #category : 'initialization' }
 SloptalkChatPresenter >> initializePresenters [
 	app ifNil: [ app := SloptalkApp current ].
@@ -198,6 +203,10 @@ SloptalkChatPresenter >> subscribeToAgent [
 	self agent
 		when: SloptalkTurnAnnouncement
 		send: #handleTurnAnnouncement:
+		to: self.
+	self app announcer
+		when: SloptalkCodexAuthAnnouncement
+		send: #handleCodexAuthAnnouncement:
 		to: self
 ]
 

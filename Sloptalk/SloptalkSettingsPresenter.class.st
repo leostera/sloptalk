@@ -4,19 +4,13 @@ Class {
 	#superclass : 'SpPresenter',
 	#instVars : [
 		'app',
-		'noteLabel',
 		'providerDropList',
-		'modelInput',
-		'baseUrlInput',
+		'providerSettingsPresenter',
+		'localOllamaSettingsPresenter',
+		'codexSettingsPresenter',
+		'openAISettingsPresenter',
 		'workspacePathInput',
 		'timeoutInput',
-		'apiKeyStatusLabel',
-		'codexStatusLabel',
-		'setApiKeyButton',
-		'clearApiKeyButton',
-		'codexDeviceLoginButton',
-		'refreshCodexStatusButton',
-		'codexDocsButton',
 		'saveButton'
 	],
 	#category : 'Sloptalk-UI',
@@ -85,11 +79,10 @@ SloptalkSettingsPresenter >> applySettings [
 					^ self ] ].
 	workspacePath := workspacePathInput text asString trimBoth.
 
-	self storeInputsForProviderKind: providerKind.
 	self app
 		applySettingsProviderKind: providerKind
-		model: modelInput text asString trimBoth
-		baseUrl: baseUrlInput text asString trimBoth
+		model: providerSettingsPresenter model
+		baseUrl: providerSettingsPresenter baseUrl
 		requestTimeoutSeconds: timeoutSeconds
 		workspacePath: workspacePath.
 
@@ -97,16 +90,25 @@ SloptalkSettingsPresenter >> applySettings [
 	self inform: 'Sloptalk settings updated.'
 ]
 
+{ #category : 'private' }
+SloptalkSettingsPresenter >> changeProviderSettingsPresenterFor: aSymbol [
+	| newPresenter |
+	newPresenter := self providerSettingsPresenterFor: aSymbol.
+	providerSettingsPresenter == newPresenter ifTrue: [
+		self refreshProviderInputsFor: aSymbol.
+		^ self ].
+
+	self layout replace: providerSettingsPresenter with: newPresenter.
+	providerSettingsPresenter := newPresenter.
+	self refreshProviderInputsFor: aSymbol
+]
+
 { #category : 'initialization' }
 SloptalkSettingsPresenter >> connectPresenters [
 	providerDropList whenSelectedItemChangedDo: [ :aSymbol |
-		aSymbol ifNotNil: [ self refreshProviderInputsFor: aSymbol ] ].
-	setApiKeyButton action: [ self promptForApiKey ].
-	clearApiKeyButton action: [ self clearApiKey ].
-	codexDeviceLoginButton action: [ self startCodexDeviceLogin ].
-	refreshCodexStatusButton action: [ self updateCodexStatus ].
-	codexDocsButton action: [ self app openCodexAuthenticationDocs ].
+		aSymbol ifNotNil: [ self changeProviderSettingsPresenterFor: aSymbol ] ].
 	saveButton action: [ self applySettings ].
+	self subscribeToApp.
 	self refreshFromApp
 ]
 
@@ -114,78 +116,37 @@ SloptalkSettingsPresenter >> connectPresenters [
 SloptalkSettingsPresenter >> defaultLayout [
 	^ SpBoxLayout newTopToBottom
 		spacing: 6;
-		add: noteLabel expand: false;
 		add: (self labeledRowWith: 'Provider' presenter: providerDropList) expand: false;
-		add: (self labeledRowWith: 'Model' presenter: modelInput) expand: false;
-		add: (self labeledRowWith: 'Base URL' presenter: baseUrlInput) expand: false;
+		add: providerSettingsPresenter expand: false;
 		add: (self labeledRowWith: 'Workspace' presenter: workspacePathInput) expand: false;
 		add: (self labeledRowWith: 'Timeout (s)' presenter: timeoutInput) expand: false;
-		add: (SpBoxLayout newLeftToRight
-				spacing: 5;
-				add: apiKeyStatusLabel;
-				add: setApiKeyButton expand: false;
-				add: clearApiKeyButton expand: false;
-				yourself)
-			expand: false;
-		add: (SpBoxLayout newLeftToRight
-				spacing: 5;
-				add: codexStatusLabel;
-				add: codexDeviceLoginButton expand: false;
-				add: refreshCodexStatusButton expand: false;
-				add: codexDocsButton expand: false;
-				yourself)
-			expand: false;
 		add: saveButton expand: false;
 		yourself
 ]
 
-{ #category : 'actions' }
-SloptalkSettingsPresenter >> clearApiKey [
-	self app clearApiKey.
-	self updateApiKeyStatus
+{ #category : 'announcements' }
+SloptalkSettingsPresenter >> handleCodexAuthAnnouncement: anAnnouncement [
+	UIManager default defer: [ self refreshFromApp ]
 ]
 
 { #category : 'initialization' }
 SloptalkSettingsPresenter >> initializePresenters [
 	app ifNil: [ app := SloptalkApp current ].
 
-	noteLabel := self newLabel
-		label:
-			'OpenAI API calls use API keys. Codex ChatGPT login is separate and is shown here for a future Codex-backed provider.';
-		yourself.
-
 	providerDropList := self newDropList
 		items: self app providerChoices;
 		display: [ :each | self app providerDisplayNameFor: each ];
 		yourself.
 
-	modelInput := self newTextInput.
-	baseUrlInput := self newTextInput.
+	localOllamaSettingsPresenter := self instantiate: SloptalkLocalOllamaSettingsPresenter.
+	codexSettingsPresenter := self instantiate: SloptalkCodexSettingsPresenter.
+	codexSettingsPresenter app: self app.
+	openAISettingsPresenter := self instantiate: SloptalkOpenAISettingsPresenter.
+	openAISettingsPresenter app: self app.
+	providerSettingsPresenter := self providerSettingsPresenterFor: self app providerKind.
+
 	workspacePathInput := self newTextInput.
 	timeoutInput := self newTextInput autoAccept: true.
-
-	apiKeyStatusLabel := self newLabel.
-	codexStatusLabel := self newLabel.
-
-	setApiKeyButton := self newButton
-		label: 'Set API Key';
-		yourself.
-
-	clearApiKeyButton := self newButton
-		label: 'Clear API Key';
-		yourself.
-
-	codexDeviceLoginButton := self newButton
-		label: 'Codex Login';
-		yourself.
-
-	refreshCodexStatusButton := self newButton
-		label: 'Refresh Codex';
-		yourself.
-
-	codexDocsButton := self newButton
-		label: 'Codex Docs';
-		yourself.
 
 	saveButton := self newButton
 		label: 'Apply Settings';
@@ -199,7 +160,8 @@ SloptalkSettingsPresenter >> initializeWindow: aWindowPresenter [
 	super initializeWindow: aWindowPresenter.
 	aWindowPresenter
 		title: self windowTitle;
-		initialExtent: self class defaultPreferredExtent
+		initialExtent: self class defaultPreferredExtent;
+		whenClosedDo: [ self unsubscribeFromApp ]
 ]
 
 { #category : 'layout' }
@@ -211,61 +173,45 @@ SloptalkSettingsPresenter >> labeledRowWith: aString presenter: aPresenter [
 		yourself
 ]
 
-{ #category : 'actions' }
-SloptalkSettingsPresenter >> promptForApiKey [
-	| apiKey |
-	apiKey := UIManager default
-		requestPassword: 'Enter the OpenAI API key for Sloptalk'.
-	apiKey ifNil: [ ^ self ].
-	self app apiKey: apiKey trimBoth.
-	self updateApiKeyStatus
-]
-
-{ #category : 'api' }
-SloptalkSettingsPresenter >> refreshCodexStatus [
-	self updateCodexStatus
+{ #category : 'private' }
+SloptalkSettingsPresenter >> providerSettingsPresenterFor: aSymbol [
+	aSymbol = #codexOAuth ifTrue: [ ^ codexSettingsPresenter ].
+	aSymbol = #openAI ifTrue: [ ^ openAISettingsPresenter ].
+	^ localOllamaSettingsPresenter
 ]
 
 { #category : 'api' }
 SloptalkSettingsPresenter >> refreshFromApp [
 	| providerKind |
-	providerKind := self app providerKind.
+	providerKind := providerDropList
+		ifNil: [ self app providerKind ]
+		ifNotNil: [ providerDropList selectedItem ifNil: [ self app providerKind ] ].
 	providerDropList selectItem: providerKind.
-	self refreshProviderInputsFor: providerKind.
+	self changeProviderSettingsPresenterFor: providerKind.
 	workspacePathInput text: self app workspacePath asString.
-	timeoutInput text: self app requestTimeoutSeconds asString.
-	self updateApiKeyStatus.
-	self updateCodexStatus
+	timeoutInput text: self app requestTimeoutSeconds asString
 ]
 
 { #category : 'api' }
 SloptalkSettingsPresenter >> refreshProviderInputsFor: aSymbol [
-	modelInput text: (self app modelForProviderKind: aSymbol).
-	baseUrlInput text: (self app baseUrlForProviderKind: aSymbol)
+	providerSettingsPresenter
+		model: (self app modelForProviderKind: aSymbol);
+		baseUrl: (self app baseUrlForProviderKind: aSymbol).
+	(providerSettingsPresenter respondsTo: #refreshFromApp) ifTrue: [
+		providerSettingsPresenter refreshFromApp ]
 ]
 
-{ #category : 'actions' }
-SloptalkSettingsPresenter >> startCodexDeviceLogin [
-	self app startCodexDeviceLogin.
-	self updateCodexStatus
+{ #category : 'announcements' }
+SloptalkSettingsPresenter >> subscribeToApp [
+	self app announcer
+		when: SloptalkCodexAuthAnnouncement
+		send: #handleCodexAuthAnnouncement:
+		to: self
 ]
 
-{ #category : 'private' }
-SloptalkSettingsPresenter >> storeInputsForProviderKind: aSymbol [
-	self app
-		updateSettingsForProviderKind: aSymbol
-		model: modelInput text asString trimBoth
-		baseUrl: baseUrlInput text asString trimBoth
-]
-
-{ #category : 'updating' }
-SloptalkSettingsPresenter >> updateApiKeyStatus [
-	apiKeyStatusLabel label: self app apiKeyStatusText
-]
-
-{ #category : 'updating' }
-SloptalkSettingsPresenter >> updateCodexStatus [
-	codexStatusLabel label: 'Codex: ' , self app codexLoginStatusText
+{ #category : 'announcements' }
+SloptalkSettingsPresenter >> unsubscribeFromApp [
+	self app announcer unsubscribe: self
 ]
 
 { #category : 'accessing' }

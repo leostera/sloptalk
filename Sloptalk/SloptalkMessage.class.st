@@ -60,6 +60,20 @@ SloptalkMessage >> asChatCompletionMessage [
 	} asDictionary
 ]
 
+{ #category : 'converting' }
+SloptalkMessage >> asResponsesInputMessage [
+	role = 'toolResult' ifTrue: [
+		^ {
+			#role -> 'user'.
+			#content -> self toolResultPromptText
+		} asDictionary ].
+
+	^ {
+		#role -> role.
+		#content -> text
+	} asDictionary
+]
+
 { #category : 'accessing' }
 SloptalkMessage >> details [
 	^ details

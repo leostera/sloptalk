@@ -560,6 +560,11 @@ SloptalkAgent >> useLocalOllamaProvider [
 ]
 
 { #category : 'configuration' }
+SloptalkAgent >> useCodexOAuthProvider [
+	self provider: SloptalkCodexOAuthProvider new
+]
+
+{ #category : 'configuration' }
 SloptalkAgent >> useOpenAIProvider [
 	self provider: SloptalkOpenAIProvider new
 ]
