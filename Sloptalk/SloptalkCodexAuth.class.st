@@ -165,7 +165,7 @@ SloptalkCodexAuth class >> paddedBase64String: aString [
 
 { #category : 'api' }
 SloptalkCodexAuth class >> pollDeviceAuthorizationForId: aDeviceAuthId userCode: aUserCode [
-	| client responseBody authorizationCode codeVerifier |
+	| client status responseBody authorizationCode codeVerifier |
 	client := self jsonClient.
 	[
 		client
@@ -174,8 +174,9 @@ SloptalkCodexAuth class >> pollDeviceAuthorizationForId: aDeviceAuthId userCode:
 				'device_auth_id' -> aDeviceAuthId.
 				'user_code' -> aUserCode
 			} asDictionary).
+		status := client response status.
 
-		client response status code = 200 ifTrue: [
+		status = 200 ifTrue: [
 			responseBody := client contents.
 			authorizationCode := self
 				valueAt: 'authorization_code'
@@ -191,10 +192,10 @@ SloptalkCodexAuth class >> pollDeviceAuthorizationForId: aDeviceAuthId userCode:
 				#codeVerifier -> codeVerifier
 			} asDictionary ].
 
-		(#(403 404) includes: client response status code) ifTrue: [
+		(#(403 404) includes: status) ifTrue: [
 			^ { #status -> #pending } asDictionary ].
 
-		client response status code = 401 ifTrue: [
+		status = 401 ifTrue: [
 			^ {
 				#status -> #declined.
 				#errorText -> 'Authorization was declined.'
